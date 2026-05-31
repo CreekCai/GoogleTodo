@@ -3,33 +3,40 @@ import type { HotkeyConfig } from "../../App";
 import { Kbd } from "../ui/Kbd";
 
 type HotkeysSectionProps = {
+  language: "en" | "zh";
   hotkeys: HotkeyConfig;
   onChange: (key: keyof HotkeyConfig, value: string) => void;
   onReset: () => void;
 };
 
-const hotkeyRows: Array<{ id: keyof HotkeyConfig; label: string; description: string }> = [
-  {
-    id: "toggleMainWindow",
-    label: "Toggle Main Window",
-    description: "显示或隐藏主界面，并切换到系统托盘",
-  },
-  {
-    id: "quickAdd",
-    label: "Quick Add",
-    description: "打开独立的快捷任务创建窗口",
-  },
-  {
-    id: "search",
-    label: "Search",
-    description: "聚焦主界面的任务搜索框",
-  },
-  {
-    id: "settings",
-    label: "Settings",
-    description: "打开设置页面",
-  },
-];
+function t(language: "en" | "zh", en: string, zh: string) {
+  return language === "zh" ? zh : en;
+}
+
+function hotkeyRows(language: "en" | "zh"): Array<{ id: keyof HotkeyConfig; label: string; description: string }> {
+  return [
+    {
+      id: "toggleMainWindow",
+      label: t(language, "Toggle Main Window", "显示/隐藏主窗口"),
+      description: t(language, "Show or hide the main window and keep it available from the system tray.", "显示或隐藏主界面，并保留在系统托盘中。"),
+    },
+    {
+      id: "quickAdd",
+      label: t(language, "Quick Add", "快捷录入"),
+      description: t(language, "Open the standalone quick task creation window.", "打开独立的快捷任务创建窗口。"),
+    },
+    {
+      id: "search",
+      label: t(language, "Search", "搜索"),
+      description: t(language, "Focus the task search box in the main window.", "聚焦主界面的任务搜索框。"),
+    },
+    {
+      id: "settings",
+      label: t(language, "Settings", "设置"),
+      description: t(language, "Open the settings window.", "打开设置页面。"),
+    },
+  ];
+}
 
 function eventToHotkey(event: KeyboardEvent<HTMLInputElement>) {
   const parts: string[] = [];
@@ -64,26 +71,26 @@ function HotkeyPreview({ value }: { value: string }) {
   );
 }
 
-export function HotkeysSection({ hotkeys, onChange, onReset }: HotkeysSectionProps) {
+export function HotkeysSection({ language, hotkeys, onChange, onReset }: HotkeysSectionProps) {
   return (
     <section className="space-y-md">
       <div className="flex items-center justify-between border-b border-hairline-soft pb-xs dark:border-surface-dark-elevated">
         <div>
-          <h3 className="text-title-md text-ink dark:text-on-dark">Hotkeys</h3>
+          <h3 className="text-title-md text-ink dark:text-on-dark">{t(language, "Hotkeys", "快捷键")}</h3>
           <p className="mt-xxs text-caption text-muted dark:text-on-dark-soft">
-            Click an input, then press a new key combination to replace it.
+            {t(language, "Click an input, then press a new key combination to replace it.", "点击输入框后，直接按下新的组合键即可替换。")}
           </p>
         </div>
         <button
           className="text-caption text-muted transition-colors hover:text-ink dark:text-on-dark-soft dark:hover:text-on-dark"
           onClick={onReset}
         >
-          Reset Defaults
+          {t(language, "Reset Defaults", "恢复默认")}
         </button>
       </div>
 
       <div className="grid gap-sm">
-        {hotkeyRows.map((row) => (
+        {hotkeyRows(language).map((row) => (
           <div
             key={row.id}
             className="grid gap-sm rounded-lg border border-hairline bg-canvas p-sm md:grid-cols-[1fr_180px] md:items-center dark:border-surface-dark-elevated dark:bg-surface-dark"

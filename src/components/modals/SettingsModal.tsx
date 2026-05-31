@@ -55,6 +55,10 @@ type SettingsModalProps = {
   onExpandSubtasksChange: (value: boolean) => void;
 };
 
+function t(language: "en" | "zh", en: string, zh: string) {
+  return language === "zh" ? zh : en;
+}
+
 export function SettingsModal({
   open,
   theme,
@@ -99,9 +103,10 @@ export function SettingsModal({
   onExpandSubtasksChange,
 }: SettingsModalProps) {
   return (
-    <Modal open={open} onClose={onClose} title="Settings" className="max-w-3xl">
+    <Modal open={open} onClose={onClose} title={t(language, "Settings", "设置")} className="max-w-3xl">
       <div className="app-scrollbar max-h-[76vh] space-y-xxl overflow-y-auto p-xl">
         <GoogleAccountSection
+          language={language}
           signedIn={googleSignedIn}
           syncing={googleSyncing}
           userName={googleUserName}
@@ -112,7 +117,7 @@ export function SettingsModal({
         />
         <section className="space-y-md">
           <h3 className="border-b border-hairline-soft pb-xs text-title-md text-ink dark:border-surface-dark-elevated dark:text-on-dark">
-            Language / 语言
+            {t(language, "Language", "语言")}
           </h3>
           <div className="inline-flex rounded-full border border-hairline bg-surface-soft p-xxs dark:border-surface-dark-elevated dark:bg-surface-dark-elevated">
             <button
@@ -138,6 +143,7 @@ export function SettingsModal({
           </div>
         </section>
         <GoogleProxySection
+          language={language}
           value={googleProxyConfig}
           saving={googleProxySaving}
           message={googleProxyMessage}
@@ -145,8 +151,9 @@ export function SettingsModal({
           onChange={onGoogleProxyChange}
           onSave={onGoogleProxySave}
         />
-        <HotkeysSection hotkeys={hotkeys} onChange={onHotkeyChange} onReset={onHotkeysReset} />
+        <HotkeysSection language={language} hotkeys={hotkeys} onChange={onHotkeyChange} onReset={onHotkeysReset} />
         <StartupSection
+          language={language}
           enabled={startupEnabled}
           saving={startupSaving}
           message={startupMessage}
@@ -165,14 +172,15 @@ export function SettingsModal({
           onAutoSyncModeChange={onAutoSyncModeChange}
           onCalendarSelectionChange={onCalendarSelectionChange}
         />
-        <AppearanceSection value={theme} onChange={onThemeChange} />
+        <AppearanceSection language={language} value={theme} onChange={onThemeChange} />
         <TaskDisplaySection
+          language={language}
           showCompleted={showCompleted}
           showTaskCount={showTaskCount}
           onShowCompletedChange={onShowCompletedChange}
           onShowTaskCountChange={onShowTaskCountChange}
         />
-        <AboutSection />
+        <AboutSection language={language} />
       </div>
     </Modal>
   );

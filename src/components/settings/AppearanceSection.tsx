@@ -2,21 +2,26 @@ import type { ThemeMode } from "../../types";
 import { cn } from "../../lib/classNames";
 
 type AppearanceSectionProps = {
+  language: "en" | "zh";
   value: ThemeMode;
   onChange: (value: ThemeMode) => void;
 };
 
-const modes: Array<{ id: ThemeMode; label: string }> = [
-  { id: "light", label: "Light" },
-  { id: "dark", label: "Dark" },
-  { id: "system", label: "System" },
-];
+function t(language: "en" | "zh", en: string, zh: string) {
+  return language === "zh" ? zh : en;
+}
 
-export function AppearanceSection({ value, onChange }: AppearanceSectionProps) {
+export function AppearanceSection({ language, value, onChange }: AppearanceSectionProps) {
+  const modes: Array<{ id: ThemeMode; label: string }> = [
+    { id: "light", label: t(language, "Light", "浅色") },
+    { id: "dark", label: t(language, "Dark", "深色") },
+    { id: "system", label: t(language, "System", "跟随系统") },
+  ];
+
   return (
     <section className="space-y-md">
       <h3 className="border-b border-hairline-soft pb-xs text-title-md text-ink dark:border-surface-dark-elevated dark:text-on-dark">
-        Appearance
+        {t(language, "Appearance", "外观")}
       </h3>
       <div className="inline-flex rounded-full border border-hairline bg-surface-soft p-xxs dark:border-surface-dark-elevated dark:bg-surface-dark-elevated">
         {modes.map((mode) => (

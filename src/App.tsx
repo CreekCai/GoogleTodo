@@ -131,6 +131,29 @@ function loadHotkeys(): HotkeyConfig {
   }
 }
 
+function loadListColorMap(fallbackLists: TaskListSummary[]): Record<string, number> {
+  const fallback = Object.fromEntries(fallbackLists.map((list, index) => [list.id, index]));
+  if (typeof window === "undefined") {
+    return fallback;
+  }
+
+  try {
+    const stored = window.localStorage.getItem("googleTodoListColors");
+    if (!stored) {
+      return fallback;
+    }
+    const parsed = JSON.parse(stored) as Record<string, unknown>;
+    return Object.fromEntries(
+      fallbackLists.map((list, index) => [
+        list.id,
+        typeof parsed[list.id] === "number" ? parsed[list.id] : index,
+      ]),
+    ) as Record<string, number>;
+  } catch {
+    return fallback;
+  }
+}
+
 function matchesHotkey(event: KeyboardEvent, hotkey: string) {
   const parts = hotkey.split("+").map((part) => part.trim()).filter(Boolean);
   const mainKey = parts[parts.length - 1]?.toLowerCase();
@@ -155,19 +178,25 @@ function toGlobalShortcut(hotkey: string) {
   return hotkey.replace(/^Ctrl(?=\+|$)/, "CommandOrControl");
 }
 
-const smartViewTitles: Record<SmartView, string> = {
-  today: "Today",
-  tomorrow: "Tomorrow",
-  past: "Past",
-  all: "All",
-};
+function smartViewTitle(view: SmartView, language: LanguageMode) {
+  const titles: Record<SmartView, [string, string]> = {
+    today: ["Today", "今天"],
+    tomorrow: ["Tomorrow", "明天"],
+    past: ["Past", "过期"],
+    all: ["All", "全部"],
+  };
+  return uiText(language, titles[view][0], titles[view][1]);
+}
 
-const smartViewSubtitles: Record<SmartView, string> = {
-  today: "Tasks due today",
-  tomorrow: "Upcoming tasks for tomorrow",
-  past: "Overdue tasks",
-  all: "All synced and local tasks",
-};
+function smartViewSubtitle(view: SmartView, language: LanguageMode) {
+  const subtitles: Record<SmartView, [string, string]> = {
+    today: ["Tasks due today", "今天到期的任务"],
+    tomorrow: ["Upcoming tasks for tomorrow", "明天的待办任务"],
+    past: ["Overdue tasks", "已过期的任务"],
+    all: ["All synced and local tasks", "所有已同步和本地任务"],
+  };
+  return uiText(language, subtitles[view][0], subtitles[view][1]);
+}
 
 const dueTextByView: Record<SmartView, string | undefined> = {
   today: "Today",
@@ -517,6 +546,19 @@ function dueTextFromDate(date?: string) {
   return date;
 }
 
+function displayDueText(dueText: string, language: LanguageMode) {
+  if (dueText === "Today") {
+    return uiText(language, "Today", "今天");
+  }
+  if (dueText === "Tomorrow") {
+    return uiText(language, "Tomorrow", "明天");
+  }
+  if (dueText === "Past") {
+    return uiText(language, "Past", "过期");
+  }
+  return dueText;
+}
+
 function dueForGoogle(task: Partial<Task>, patch: Partial<Task>) {
   const dueText = patch.dueText ?? task.dueText;
   const dueLabel = patch.dueLabel ?? task.dueLabel;
@@ -812,7 +854,7 @@ export default function App() {
   const [tasks, setTasks] = useState<Task[]>(mockTasks);
   const [activeView, setActiveView] = useState<WorkspaceView>("list");
   const [activeListId, setActiveListId] = useState("my-tasks");
-  const [activeSmartView, setActiveSmartView] = useState<SmartView | null>("all");
+  const [activeSmartView, setActiveSmartView] = useState<SmartView | null>("today");
   const [selectedTaskId, setSelectedTaskId] = useState("");
   const [selectedCalendarEventId, setSelectedCalendarEventId] = useState("");
   const [showCompleted, setShowCompleted] = useState(true);
@@ -826,9 +868,7 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [manageListsOpen, setManageListsOpen] = useState(false);
   const [hotkeys, setHotkeys] = useState<HotkeyConfig>(() => loadHotkeys());
-  const [listColorMap, setListColorMap] = useState<Record<string, number>>(() =>
-    Object.fromEntries(mockLists.map((list, index) => [list.id, index])),
-  );
+  const [listColorMap, setListColorMap] = useState<Record<string, number>>(() => loadListColorMap(mockLists));
   const [listCustomColorMap, setListCustomColorMap] = useState<ListCustomColorMap>(() => {
     if (typeof window === "undefined") {
       return {};
@@ -950,6 +990,10 @@ export default function App() {
   }, [hotkeys]);
 
   useEffect(() => {
+    window.localStorage.setItem("googleTodoListColors", JSON.stringify(listColorMap));
+  }, [listColorMap]);
+
+  useEffect(() => {
     window.localStorage.setItem("googleTodoListCustomColors", JSON.stringify(listCustomColorMap));
   }, [listCustomColorMap]);
 
@@ -1037,14 +1081,14 @@ export default function App() {
 
   const activeTitle = useMemo(() => {
     if (activeSmartView) {
-      return smartViewTitles[activeSmartView];
+      return smartViewTitle(activeSmartView, language);
     }
     return lists.find((list) => list.id === activeListId)?.name ?? "My Tasks";
-  }, [activeListId, activeSmartView, lists]);
+  }, [activeListId, activeSmartView, language, lists]);
 
   const activeSubtitle = useMemo(() => {
     if (activeSmartView) {
-      return smartViewSubtitles[activeSmartView];
+      return smartViewSubtitle(activeSmartView, language);
     }
     if (usingGoogleData) {
       const syncText = lastSyncedAt
@@ -1184,7 +1228,6 @@ export default function App() {
       setTasks(nextTasks);
       setUsingGoogleData(true);
       setActiveListId(nextActiveListId);
-      setActiveSmartView(null);
       setSelectedTaskId((current) => (nextTasks.some((task) => task.id === current) ? current : ""));
     }
 
@@ -1199,7 +1242,7 @@ export default function App() {
 
   const refreshGoogleData = async (preferredListId?: string) => {
     setGoogleSyncing(true);
-    setSyncMessage("同 Google Tasks...");
+    setSyncMessage(uiText(language, "Syncing with Google Tasks...", "正在同步 Google Tasks..."));
     setLastGoogleError("");
     try {
       const result = await syncApi.syncNow();
@@ -1539,8 +1582,11 @@ export default function App() {
       setCalendarLists([]);
       setCalendarListMessage("");
       setLists(mockLists);
-      setListColorMap(Object.fromEntries(mockLists.map((list, index) => [list.id, index])));
+      setListColorMap((current) =>
+        Object.fromEntries(mockLists.map((list, index) => [list.id, current[list.id] ?? index])),
+      );
       setTasks(mockTasks);
+      setActiveSmartView("today");
       setSelectedTaskId("");
       setSelectedCalendarEventId("");
       setSyncMessage(uiText(language, "Signed out. Showing local demo data.", "已退出 Google 登录，当前显示本地演示数据。"));
@@ -2075,6 +2121,11 @@ export default function App() {
       delete next[listId];
       return next;
     });
+    setListCustomColorMap((current) => {
+      const next = { ...current };
+      delete next[listId];
+      return next;
+    });
     if (activeListId === listId) {
       setActiveListId(nextLists[0]?.id ?? "");
       setActiveSmartView(null);
@@ -2270,6 +2321,7 @@ export default function App() {
         <main className="flex min-w-0 flex-1 flex-col bg-canvas dark:bg-surface-dark">
           <DesignTopBar
             activeView={activeView}
+            language={language}
             onViewChange={(view) => {
               setSelectedTaskId("");
               setSelectedCalendarEventId("");
@@ -2338,6 +2390,7 @@ export default function App() {
               lists={lists}
               listColorMap={listColorMap}
               listCustomColorMap={listCustomColorMap}
+              language={language}
               onSelectTask={(taskId) => {
                 setSelectedCalendarEventId("");
                 setSelectedTaskId(taskId);
@@ -2373,6 +2426,7 @@ export default function App() {
             <ManageListsWorkspace
               lists={lists}
               tasks={tasks}
+              language={language}
               onCreateList={() => setManageListsOpen(true)}
               onRenameList={renameList}
               onSelectList={selectList}
@@ -2385,6 +2439,7 @@ export default function App() {
               description="Completed tasks are shown here. Deleted tasks are removed from Google Tasks immediately in this phase."
               tasks={tasks.filter((task) => task.completed)}
               emptyText="No archived or deleted tasks yet."
+              language={language}
               onSelectTask={(taskId) => {
                 setSelectedCalendarEventId("");
                 setSelectedTaskId(taskId);
@@ -2399,6 +2454,7 @@ export default function App() {
               description="Deleted Google Tasks are removed immediately. Local trash is reserved for a later recycle-bin workflow."
               tasks={[]}
               emptyText="Trash is empty."
+              language={language}
               onSelectTask={() => undefined}
             />
           ) : null}
@@ -2409,6 +2465,7 @@ export default function App() {
           tasks={tasks}
           listColorMap={listColorMap}
           listCustomColorMap={listCustomColorMap}
+          language={language}
           onColorChange={(listId, colorIndex) => {
             setListColorMap((current) => ({ ...current, [listId]: colorIndex }));
             setListCustomColorMap((current) => {
@@ -2542,10 +2599,10 @@ function DesignSidebar({
   onToggleCollapsed,
 }: DesignSidebarProps) {
   const smartViews: Array<{ id: SmartView; label: string; icon: typeof CalendarDays }> = [
-    { id: "today", label: "Today", icon: CalendarCheck },
-    { id: "tomorrow", label: "Tomorrow", icon: CalendarClock },
-    { id: "past", label: "Past", icon: Clock3 },
-    { id: "all", label: "All", icon: CheckCircle2 },
+    { id: "today", label: smartViewTitle("today", language), icon: CalendarCheck },
+    { id: "tomorrow", label: smartViewTitle("tomorrow", language), icon: CalendarClock },
+    { id: "past", label: smartViewTitle("past", language), icon: Clock3 },
+    { id: "all", label: smartViewTitle("all", language), icon: CheckCircle2 },
   ];
 
   const SyncIcon = syncState === "offline" ? CloudOff : syncState === "syncing" ? RefreshCw : Cloud;
@@ -2577,7 +2634,7 @@ function DesignSidebar({
           "grid h-9 w-9 shrink-0 place-items-center rounded-lg text-caption font-semibold text-on-dark shadow-subtle",
           signedIn ? "bg-primary" : "bg-muted",
         )}>
-          {signedIn ? userName.slice(0, 2).toUpperCase() : "未"}
+          {signedIn ? userName.slice(0, 2).toUpperCase() : uiText(language, "NO", "未")}
         </div>
         {!collapsed ? (
           <>
@@ -2594,7 +2651,7 @@ function DesignSidebar({
         <>
           <Button className="mt-md w-full rounded-lg shadow-subtle active:translate-y-px" onClick={onCreateList}>
             <Plus size={18} />
-            New List
+            {uiText(language, "New List", "新建清单")}
           </Button>
           <label className="mt-md flex h-10 items-center gap-sm rounded-lg border border-hairline bg-surface-card px-sm shadow-subtle transition-colors focus-within:border-primary dark:border-surface-dark-elevated dark:bg-surface-dark">
             <Search size={17} className="text-muted" />
@@ -2603,7 +2660,7 @@ function DesignSidebar({
               className="min-w-0 flex-1 border-none bg-transparent p-0 text-body-sm text-ink outline-none placeholder:text-muted focus:ring-0 dark:text-on-dark"
               value={searchValue}
               onChange={(event) => onSearchChange(event.target.value)}
-              placeholder="Search tasks..."
+              placeholder={uiText(language, "Search tasks...", "搜索任务...")}
             />
           </label>
         </>
@@ -2639,7 +2696,7 @@ function DesignSidebar({
         </nav>
 
         <div className="mt-md">
-          {!collapsed ? <div className="px-sm text-caption font-semibold text-muted">Lists</div> : null}
+          {!collapsed ? <div className="px-sm text-caption font-semibold text-muted">{uiText(language, "Lists", "清单")}</div> : null}
           <div className="mt-xs space-y-xs">
             {lists.map((list, index) => {
               const ListIcon = [Folder, Briefcase, Home][index % 3];
@@ -2674,10 +2731,10 @@ function DesignSidebar({
             collapsed && "h-9",
           )}
           onClick={() => document.getElementById("sidebar-list-scroll")?.scrollBy({ top: 160, behavior: "smooth" })}
-          title="Scroll lists"
+          title={uiText(language, "Scroll lists", "滚动清单")}
         >
           <ChevronDown size={18} />
-          {!collapsed ? <span className="ml-xs text-caption">More</span> : null}
+          {!collapsed ? <span className="ml-xs text-caption">{uiText(language, "More", "更多")}</span> : null}
         </button>
         <button
           className={cn(
@@ -2686,10 +2743,10 @@ function DesignSidebar({
             activeView === "archive" && "bg-surface-card text-ink shadow-subtle dark:bg-surface-dark dark:text-on-dark",
           )}
           onClick={() => onUtilityView("archive")}
-          title="Archive and trash"
+          title={uiText(language, "Archive and trash", "归档和回收站")}
         >
           <Archive size={19} />
-          {!collapsed ? <span>Archive / Trash</span> : null}
+          {!collapsed ? <span>{uiText(language, "Archive / Trash", "归档 / 删除")}</span> : null}
         </button>
         <div className={cn("mt-sm flex items-center", collapsed ? "flex-col gap-xs" : "justify-between")}>
           <button
@@ -2702,7 +2759,7 @@ function DesignSidebar({
           <button
             className="app-focus-ring grid h-9 w-9 place-items-center rounded-lg text-muted transition-colors hover:bg-surface-card"
             onClick={onToggleCollapsed}
-            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={collapsed ? uiText(language, "Expand sidebar", "展开侧边栏") : uiText(language, "Collapse sidebar", "收起侧边栏")}
           >
             {collapsed ? <PanelLeftOpen size={19} /> : <PanelLeftClose size={19} />}
           </button>
@@ -2714,17 +2771,19 @@ function DesignSidebar({
 
 type DesignTopBarProps = {
   activeView: WorkspaceView;
+  language: LanguageMode;
   onViewChange: (view: WorkspaceView) => void;
 };
 
 function DesignTopBar({
   activeView,
+  language,
   onViewChange,
 }: DesignTopBarProps) {
   const tabs: Array<{ id: WorkspaceView; label: string }> = [
-    { id: "list", label: "List" },
-    { id: "board", label: "Board" },
-    { id: "calendar", label: "Calendar" },
+    { id: "list", label: uiText(language, "List", "列表") },
+    { id: "board", label: uiText(language, "Board", "看板") },
+    { id: "calendar", label: uiText(language, "Calendar", "日历") },
   ];
 
   return (
@@ -2833,14 +2892,17 @@ function ListWorkspace({
                 onAddTask();
               }
             }}
-            placeholder="New task"
+            placeholder={uiText(language, "New task", "新任务")}
           />
-          <Button className="h-8 px-sm active:translate-y-px" onClick={onAddTask}>Add</Button>
+          <Button className="h-8 px-sm active:translate-y-px" onClick={onAddTask}>{uiText(language, "Add", "添加")}</Button>
         </div>
 
         <div className="mt-lg space-y-sm">
           {items.length === 0 ? (
-            <EmptyState title="No tasks here" description="Create a task or switch to another list." />
+            <EmptyState
+              title={uiText(language, "No tasks here", "这里没有任务")}
+              description={uiText(language, "Create a task or switch to another list.", "创建任务或切换到其他清单。")}
+            />
           ) : (
             items.map((item) =>
               item.kind === "task" ? (
@@ -2852,6 +2914,7 @@ function ListWorkspace({
                   toneStyle={customColorStyle(listCustomColorMap[item.task.listId])}
                   listLabelClass={listLabelToneClass(item.task.listId, lists, listColorMap, listCustomColorMap)}
                   listLabelStyle={customColorStyle(listCustomColorMap[item.task.listId], "label")}
+                  language={language}
                   selected={selectedTaskId === item.task.id}
                   onSelect={() => onSelectTask(item.task.id)}
                   onToggle={() => onToggleTask(item.task.id)}
@@ -2880,6 +2943,7 @@ type TaskRowProps = {
   toneStyle?: CSSProperties;
   listLabelClass: string;
   listLabelStyle?: CSSProperties;
+  language: LanguageMode;
   selected: boolean;
   onSelect: () => void;
   onToggle: () => void;
@@ -2892,6 +2956,7 @@ function TaskRow({
   toneStyle,
   listLabelClass,
   listLabelStyle,
+  language,
   selected,
   onSelect,
   onToggle,
@@ -2912,7 +2977,7 @@ function TaskRow({
           <div className={cn("text-title-md text-ink dark:text-on-dark", task.completed && "text-muted line-through")}>{task.title}</div>
           <div className="mt-xs flex flex-wrap items-center gap-xs text-caption text-muted">
             <Badge className={listLabelClass} style={listLabelStyle}>{listName}</Badge>
-            {task.dueText ? <Badge className={dueLabelToneClass(task)}>{task.dueText}</Badge> : null}
+            {task.dueText ? <Badge className={dueLabelToneClass(task)}>{displayDueText(task.dueText, language)}</Badge> : null}
             {task.estimate ? <Badge className="border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-zinc-400/30 dark:bg-zinc-400/10 dark:text-zinc-200">{task.estimate}</Badge> : null}
           </div>
         </button>
@@ -3074,7 +3139,10 @@ function TaskDetailsPanel({
   if (!task) {
     return (
       <aside data-detail-interactive="true" className="hidden w-[360px] shrink-0 border-l border-hairline bg-surface px-lg py-lg xl:flex xl:flex-col dark:border-surface-dark-elevated dark:bg-surface-dark-elevated">
-        <EmptyState title="No task selected" description="Pick a task from the list to edit details." />
+        <EmptyState
+          title={uiText(language, "No task selected", "未选择任务")}
+          description={uiText(language, "Pick a task from the list to edit details.", "从列表中选择一个任务以编辑详情。")}
+        />
       </aside>
     );
   }
@@ -3082,14 +3150,14 @@ function TaskDetailsPanel({
   return (
     <aside data-detail-interactive="true" className="hidden w-[400px] shrink-0 flex-col border-l border-hairline bg-surface-soft px-lg py-lg xl:flex dark:border-surface-dark-elevated dark:bg-surface-dark-elevated">
       <div className="flex shrink-0 items-center justify-between">
-        <button className="app-focus-ring grid h-9 w-9 place-items-center rounded-lg text-muted transition-colors hover:bg-surface-card" onClick={onClose} title="Close details">
+        <button className="app-focus-ring grid h-9 w-9 place-items-center rounded-lg text-muted transition-colors hover:bg-surface-card" onClick={onClose} title={uiText(language, "Close details", "关闭详情")}>
           <X size={18} />
         </button>
         <span className="rounded-lg border border-hairline bg-surface-card px-sm py-xs text-caption text-muted shadow-subtle dark:border-surface-dark dark:bg-surface-dark">
           {uiText(language, "Editing", "编辑中")}
         </span>
         <div className="flex items-center gap-xs">
-          <button className="app-focus-ring grid h-9 w-9 place-items-center rounded-lg text-error transition-colors hover:bg-error-container/30" onClick={onDeleteTask} title="Delete task">
+          <button className="app-focus-ring grid h-9 w-9 place-items-center rounded-lg text-error transition-colors hover:bg-error-container/30" onClick={onDeleteTask} title={uiText(language, "Delete task", "删除任务")}>
             <Trash2 size={18} />
           </button>
         </div>
@@ -3106,7 +3174,7 @@ function TaskDetailsPanel({
             const title = event.target.value;
             onUpdateTask(task.id, { title, lastEdited: "just now" });
           }}
-          placeholder="Task title"
+          placeholder={uiText(language, "Task title", "任务标题")}
         />
         <textarea
           ref={notesRef}
@@ -3117,7 +3185,7 @@ function TaskDetailsPanel({
             const notes = event.target.value;
             onUpdateTask(task.id, { notes, lastEdited: "just now" });
           }}
-          placeholder="Notes"
+          placeholder={uiText(language, "Notes", "备注")}
         />
 
         <div className="grid grid-cols-[36px_1fr] items-center gap-md">
@@ -3323,13 +3391,13 @@ function CalendarEventDetailsPanel({
   return (
     <aside data-detail-interactive="true" className="hidden w-[400px] shrink-0 flex-col border-l border-hairline bg-surface-soft px-lg py-lg xl:flex dark:border-surface-dark-elevated dark:bg-surface-dark-elevated">
       <div className="flex shrink-0 items-center justify-between">
-        <button className="app-focus-ring grid h-9 w-9 place-items-center rounded-lg text-muted transition-colors hover:bg-surface-card" onClick={onClose} title="Close details">
+        <button className="app-focus-ring grid h-9 w-9 place-items-center rounded-lg text-muted transition-colors hover:bg-surface-card" onClick={onClose} title={uiText(language, "Close details", "关闭详情")}>
           <X size={18} />
         </button>
         <span className="rounded-lg border border-hairline bg-surface-card px-sm py-xs text-caption text-muted shadow-subtle dark:border-surface-dark dark:bg-surface-dark">
           {uiText(language, "Calendar event", "日程")}
         </span>
-        <button className="app-focus-ring grid h-9 w-9 place-items-center rounded-lg text-error transition-colors hover:bg-error-container/30" onClick={onDeleteEvent} title="Delete calendar event">
+        <button className="app-focus-ring grid h-9 w-9 place-items-center rounded-lg text-error transition-colors hover:bg-error-container/30" onClick={onDeleteEvent} title={uiText(language, "Delete calendar event", "删除日程")}>
           <Trash2 size={18} />
         </button>
       </div>
@@ -3421,24 +3489,25 @@ type BoardWorkspaceProps = {
   lists: TaskListSummary[];
   listColorMap: Record<string, number>;
   listCustomColorMap: ListCustomColorMap;
+  language: LanguageMode;
   onSelectTask: (taskId: string) => void;
 };
 
-function BoardWorkspace({ tasks, lists, listColorMap, listCustomColorMap, onSelectTask }: BoardWorkspaceProps) {
+function BoardWorkspace({ tasks, lists, listColorMap, listCustomColorMap, language, onSelectTask }: BoardWorkspaceProps) {
   const columns = [
     {
       id: "todo",
-      title: "To Do",
+      title: uiText(language, "To Do", "待办"),
       tasks: sortTasksByTime(tasks.filter((task) => !task.completed && task.dueLabel !== "today" && task.dueLabel !== "past")),
     },
     {
       id: "progress",
-      title: "In Process",
+      title: uiText(language, "In Process", "进行中"),
       tasks: sortTasksByTime(tasks.filter((task) => !task.completed && task.dueLabel === "today")),
     },
     {
       id: "overdue",
-      title: "Overdue",
+      title: uiText(language, "Overdue", "已过期"),
       tasks: sortTasksByTime(tasks.filter((task) => !task.completed && task.dueLabel === "past")),
     },
   ];
@@ -3447,8 +3516,8 @@ function BoardWorkspace({ tasks, lists, listColorMap, listCustomColorMap, onSele
     <section className="min-h-0 flex-1 overflow-y-auto bg-canvas p-lg dark:bg-surface-dark">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-display text-display-md text-ink dark:text-on-dark">Board</h1>
-          <p className="mt-xs text-body-md text-muted">Plan work by state without leaving the task system.</p>
+          <h1 className="font-display text-display-md text-ink dark:text-on-dark">{uiText(language, "Board", "看板")}</h1>
+          <p className="mt-xs text-body-md text-muted">{uiText(language, "Plan work by state without leaving the task system.", "按状态查看任务，不必离开当前任务系统。")}</p>
         </div>
       </div>
       <div className="mt-lg grid min-w-[760px] grid-cols-3 gap-lg">
@@ -3460,7 +3529,7 @@ function BoardWorkspace({ tasks, lists, listColorMap, listCustomColorMap, onSele
             </div>
             <div className="mt-md space-y-sm">
               {column.tasks.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-hairline bg-surface-card p-md text-body-sm text-muted">No tasks</div>
+                <div className="rounded-xl border border-dashed border-hairline bg-surface-card p-md text-body-sm text-muted">{uiText(language, "No tasks", "暂无任务")}</div>
               ) : (
                 column.tasks.map((task) => (
                   <button
@@ -3475,9 +3544,9 @@ function BoardWorkspace({ tasks, lists, listColorMap, listCustomColorMap, onSele
                         className={listLabelToneClass(task.listId, lists, listColorMap, listCustomColorMap)}
                         style={customColorStyle(listCustomColorMap[task.listId], "label")}
                       >
-                        {lists.find((list) => list.id === task.listId)?.name ?? "Tasks"}
+                        {lists.find((list) => list.id === task.listId)?.name ?? uiText(language, "Tasks", "任务")}
                       </Badge>
-                      {task.dueText ? <Badge className={dueLabelToneClass(task)}>{task.dueText}</Badge> : null}
+                      {task.dueText ? <Badge className={dueLabelToneClass(task)}>{displayDueText(task.dueText, language)}</Badge> : null}
                     </div>
                   </button>
                 ))
@@ -3666,30 +3735,31 @@ function CalendarWorkspace({
 type ManageListsWorkspaceProps = {
   lists: TaskListSummary[];
   tasks: Task[];
+  language: LanguageMode;
   onCreateList: () => void;
   onRenameList: (listId: string) => void;
   onSelectList: (listId: string) => void;
 };
 
-function ManageListsWorkspace({ lists, tasks, onCreateList, onRenameList, onSelectList }: ManageListsWorkspaceProps) {
+function ManageListsWorkspace({ lists, tasks, language, onCreateList, onRenameList, onSelectList }: ManageListsWorkspaceProps) {
   return (
     <section className="min-h-0 flex-1 overflow-y-auto bg-canvas p-lg dark:bg-surface-dark">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-display text-display-md text-ink dark:text-on-dark">Manage Lists</h1>
-          <p className="mt-xs text-body-md text-muted">Review local lists and open a focused task list.</p>
+          <h1 className="font-display text-display-md text-ink dark:text-on-dark">{uiText(language, "Manage Lists", "管理清单")}</h1>
+          <p className="mt-xs text-body-md text-muted">{uiText(language, "Review local lists and open a focused task list.", "查看本地清单并打开对应任务列表。")}</p>
         </div>
         <Button onClick={onCreateList}>
           <Plus size={18} />
-          New List
+          {uiText(language, "New List", "新建清单")}
         </Button>
       </div>
 
       <div className="mt-lg overflow-hidden rounded-lg border border-hairline bg-surface dark:border-surface-dark-elevated dark:bg-surface-dark-elevated">
         <div className="grid grid-cols-[1fr_120px_220px] border-b border-hairline px-md py-sm text-caption font-semibold uppercase text-muted dark:border-surface-dark">
-          <span>Name</span>
-          <span>Tasks</span>
-          <span>Actions</span>
+          <span>{uiText(language, "Name", "名称")}</span>
+          <span>{uiText(language, "Tasks", "任务")}</span>
+          <span>{uiText(language, "Actions", "操作")}</span>
         </div>
         {lists.map((list) => {
           const Icon = list.icon;
@@ -3701,8 +3771,8 @@ function ManageListsWorkspace({ lists, tasks, onCreateList, onRenameList, onSele
               </div>
               <span className="text-body-sm text-muted">{tasks.filter((task) => task.listId === list.id).length}</span>
               <div className="flex gap-sm">
-                <Button className="h-8 px-sm" variant="secondary" onClick={() => onSelectList(list.id)}>Open</Button>
-                <Button className="h-8 px-sm" variant="secondary" onClick={() => onRenameList(list.id)}>Rename</Button>
+                <Button className="h-8 px-sm" variant="secondary" onClick={() => onSelectList(list.id)}>{uiText(language, "Open", "打开")}</Button>
+                <Button className="h-8 px-sm" variant="secondary" onClick={() => onRenameList(list.id)}>{uiText(language, "Rename", "重命名")}</Button>
               </div>
             </div>
           );
@@ -3718,6 +3788,7 @@ type ManageListsModalProps = {
   tasks: Task[];
   listColorMap: Record<string, number>;
   listCustomColorMap: ListCustomColorMap;
+  language: LanguageMode;
   onColorChange: (listId: string, colorIndex: number) => void;
   onCustomColorChange: (listId: string, color: string) => void;
   onCreateList: (name: string, colorIndex: number) => string | undefined;
@@ -3733,6 +3804,7 @@ function ManageListsModal({
   tasks,
   listColorMap,
   listCustomColorMap,
+  language,
   onColorChange,
   onCustomColorChange,
   onCreateList,
@@ -3804,7 +3876,7 @@ function ManageListsModal({
       setCustomHex(normalized.replace("#", ""));
       return;
     }
-    window.alert("Please enter a 6-digit HEX color, for example 3B82F6.");
+    window.alert(uiText(language, "Please enter a 6-digit HEX color, for example 3B82F6.", "请输入 6 位 HEX 色值，例如 3B82F6。"));
   };
 
   const saveChanges = () => {
@@ -3844,15 +3916,15 @@ function ManageListsModal({
     <div className="fixed inset-0 z-50 grid place-items-center bg-primary/20 p-md backdrop-blur-sm">
       <section className="flex h-[80vh] max-h-[800px] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-hairline bg-canvas shadow-panel dark:border-surface-dark-elevated dark:bg-surface-dark">
         <header className="flex shrink-0 items-center justify-between border-b border-hairline bg-canvas px-lg py-md dark:border-surface-dark-elevated dark:bg-surface-dark">
-          <h2 className="text-title-lg text-ink dark:text-on-dark">Manage Lists</h2>
-          <button className="grid h-9 w-9 place-items-center rounded-lg text-muted transition-colors hover:bg-surface-soft hover:text-ink dark:hover:bg-surface-dark-elevated dark:hover:text-on-dark" onClick={onClose} title="Close">
+          <h2 className="text-title-lg text-ink dark:text-on-dark">{uiText(language, "Manage Lists", "管理清单")}</h2>
+          <button className="grid h-9 w-9 place-items-center rounded-lg text-muted transition-colors hover:bg-surface-soft hover:text-ink dark:hover:bg-surface-dark-elevated dark:hover:text-on-dark" onClick={onClose} title={uiText(language, "Close", "关闭")}>
             <X size={18} />
           </button>
         </header>
 
         <div className="flex min-h-0 flex-1 overflow-hidden">
           <aside className="flex h-full w-1/3 min-w-[240px] flex-col border-r border-hairline bg-surface-soft dark:border-surface-dark-elevated dark:bg-surface-dark-elevated">
-            <div className="p-md text-caption font-semibold uppercase tracking-wide text-muted-soft">Your Lists</div>
+            <div className="p-md text-caption font-semibold uppercase tracking-wide text-muted-soft">{uiText(language, "Your Lists", "你的清单")}</div>
             <div className="app-scrollbar flex-1 space-y-xxs overflow-y-auto px-sm pb-md">
               {lists.map((list, index) => {
                 const Icon = list.icon;
@@ -3898,7 +3970,7 @@ function ManageListsModal({
                 }}
               >
                 <Plus size={17} />
-                Create New List
+                {uiText(language, "Create New List", "创建新清单")}
               </button>
             </div>
           </aside>
@@ -3907,17 +3979,17 @@ function ManageListsModal({
             <div className="app-scrollbar flex-1 overflow-y-auto p-xl">
               <div className="mx-auto max-w-md space-y-lg">
                 <div className="space-y-sm">
-                  <label className="block text-caption font-medium text-muted dark:text-on-dark-soft">List Name</label>
+                  <label className="block text-caption font-medium text-muted dark:text-on-dark-soft">{uiText(language, "List Name", "清单名称")}</label>
                   <input
                     className="h-10 w-full rounded-lg border border-outline-variant bg-canvas px-md text-body-md text-ink outline-none transition-shadow focus:border-primary focus:ring-1 focus:ring-primary dark:border-surface-dark-elevated dark:bg-surface-dark-elevated dark:text-on-dark"
                     value={mode === "create" ? createName : nameDraft}
                     onChange={(event) => mode === "create" ? setCreateName(event.target.value) : setNameDraft(event.target.value)}
-                    placeholder={mode === "create" ? "New list name" : "List name"}
+                    placeholder={mode === "create" ? uiText(language, "New list name", "新清单名称") : uiText(language, "List name", "清单名称")}
                   />
                 </div>
 
                 <div className="space-y-md">
-                  <label className="block text-caption font-medium text-muted dark:text-on-dark-soft">List Color</label>
+                  <label className="block text-caption font-medium text-muted dark:text-on-dark-soft">{uiText(language, "List Color", "清单颜色")}</label>
                   <div className="grid grid-cols-6 gap-md">
                     {listColorSwatches.map((swatch, index) => {
                       const selected = activeColor % listColorSwatches.length === index;
@@ -3937,16 +4009,16 @@ function ManageListsModal({
                     <button
                       className="relative h-10 w-10 overflow-hidden rounded-full border border-black/10 transition-transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
                       onClick={() => setCustomHex(activeHex.replace("#", ""))}
-                      title="Custom color"
+                      title={uiText(language, "Custom color", "自定义颜色")}
                     >
                       <span className="absolute inset-0" style={{ background: "conic-gradient(from 0deg, #ff0000, #ff8000, #ffff00, #00ff00, #00ffff, #0000ff, #8000ff, #ff00ff, #ff0000)" }} />
                     </button>
                   </div>
 
                   <div className="space-y-md rounded-lg border border-hairline bg-surface-soft p-md dark:border-surface-dark-elevated dark:bg-surface-dark-elevated">
-                    <div className="text-caption font-medium uppercase tracking-wide text-muted">Custom Picker</div>
+                    <div className="text-caption font-medium uppercase tracking-wide text-muted">{uiText(language, "Custom Picker", "自定义颜色")}</div>
                     <label className="grid h-32 cursor-pointer place-items-center overflow-hidden rounded-lg border border-hairline text-caption text-muted shadow-subtle dark:border-surface-dark" style={{ backgroundColor: activeHex }}>
-                      <span className="rounded bg-black/35 px-sm py-xs text-white shadow-subtle">Pick any color</span>
+                      <span className="rounded bg-black/35 px-sm py-xs text-white shadow-subtle">{uiText(language, "Pick any color", "选择任意颜色")}</span>
                       <input
                         className="sr-only"
                         type="color"
@@ -3970,18 +4042,18 @@ function ManageListsModal({
                           onChange={(event) => setCustomHex(event.target.value)}
                         />
                       </div>
-                      <Button className="h-10" onClick={applyCustomColor}>Apply</Button>
+                      <Button className="h-10" onClick={applyCustomColor}>{uiText(language, "Apply", "应用")}</Button>
                     </div>
                   </div>
                 </div>
 
                 {mode === "edit" && selectedList ? (
                   <div className="border-t border-hairline pt-lg dark:border-surface-dark-elevated">
-                    <h3 className="text-title-md text-error">Danger Zone</h3>
-                    <p className="mt-xs text-body-sm text-muted dark:text-on-dark-soft">删除清单会同时移除该清单下的本地任务。已连接 Google 时暂不允许删除远端清单。</p>
+                    <h3 className="text-title-md text-error">{uiText(language, "Danger Zone", "危险操作")}</h3>
+                    <p className="mt-xs text-body-sm text-muted dark:text-on-dark-soft">{uiText(language, "Deleting a list also removes local tasks in that list. Remote Google lists cannot be deleted in this phase.", "删除清单会同时移除该清单下的本地任务。已连接 Google 时暂不允许删除远端清单。")}</p>
                     <Button className="mt-md" variant="danger" onClick={deleteSelectedList}>
                       <Trash2 size={17} />
-                      Delete List
+                      {uiText(language, "Delete List", "删除清单")}
                     </Button>
                   </div>
                 ) : null}
@@ -3989,8 +4061,8 @@ function ManageListsModal({
             </div>
 
             <footer className="flex shrink-0 justify-end gap-md border-t border-hairline bg-surface-soft p-lg dark:border-surface-dark-elevated dark:bg-surface-dark-elevated">
-              <Button variant="secondary" onClick={onClose}>Cancel</Button>
-              <Button onClick={saveChanges}>{mode === "create" ? "Create List" : "Save Changes"}</Button>
+              <Button variant="secondary" onClick={onClose}>{uiText(language, "Cancel", "取消")}</Button>
+              <Button onClick={saveChanges}>{mode === "create" ? uiText(language, "Create List", "创建清单") : uiText(language, "Save Changes", "保存修改")}</Button>
             </footer>
           </section>
         </div>
@@ -4004,17 +4076,21 @@ type UtilityWorkspaceProps = {
   description: string;
   tasks: Task[];
   emptyText: string;
+  language: LanguageMode;
   onSelectTask: (taskId: string) => void;
 };
 
-function UtilityWorkspace({ title, description, tasks, emptyText, onSelectTask }: UtilityWorkspaceProps) {
+function UtilityWorkspace({ title, description, tasks, emptyText, language, onSelectTask }: UtilityWorkspaceProps) {
   return (
     <section className="min-h-0 flex-1 overflow-y-auto bg-canvas p-lg dark:bg-surface-dark">
-      <h1 className="font-display text-display-md text-ink dark:text-on-dark">{title}</h1>
-      <p className="mt-xs text-body-md text-muted">{description}</p>
+      <h1 className="font-display text-display-md text-ink dark:text-on-dark">{uiDictionary[title] && language === "zh" ? uiDictionary[title] : title}</h1>
+      <p className="mt-xs text-body-md text-muted">{uiDictionary[description] && language === "zh" ? uiDictionary[description] : description}</p>
       <div className="mt-lg max-w-3xl space-y-sm">
         {tasks.length === 0 ? (
-          <EmptyState title={emptyText} description="Nothing to review here right now." />
+          <EmptyState
+            title={uiDictionary[emptyText] && language === "zh" ? uiDictionary[emptyText] : emptyText}
+            description={uiText(language, "Nothing to review here right now.", "现在没有需要查看的内容。")}
+          />
         ) : (
           tasks.map((task) => (
             <button key={task.id} className="flex w-full items-center justify-between rounded-lg border border-hairline bg-surface p-md text-left hover:ring-1 hover:ring-primary dark:border-surface-dark-elevated dark:bg-surface-dark-elevated" onClick={() => onSelectTask(task.id)}>
