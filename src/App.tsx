@@ -2562,20 +2562,20 @@ function DesignSidebar({
   return (
     <aside
       className={cn(
-        "hidden h-full shrink-0 flex-col border-r border-hairline bg-surface py-lg md:flex dark:border-surface-dark-elevated dark:bg-surface-dark-elevated",
-        collapsed ? "w-16 px-xs" : "w-72 px-lg",
+        "hidden h-full shrink-0 flex-col border-r border-hairline bg-surface-soft py-md md:flex dark:border-surface-dark-elevated dark:bg-surface-dark-elevated",
+        collapsed ? "w-16 px-xs" : "w-[292px] px-md",
       )}
     >
       <button
         className={cn(
-          "flex h-11 items-center gap-sm rounded-lg text-left hover:bg-surface-container-high dark:hover:bg-surface-dark",
+          "app-focus-ring flex h-11 items-center gap-sm rounded-lg text-left transition-colors hover:bg-surface-card dark:hover:bg-surface-dark",
           collapsed ? "justify-center px-xs" : "px-sm",
         )}
         onClick={onAccountClick}
       >
         <div className={cn(
-          "grid h-9 w-9 shrink-0 place-items-center rounded-full text-caption font-semibold text-on-dark",
-          signedIn ? "bg-gradient-to-br from-secondary to-badge-violet" : "bg-muted",
+          "grid h-9 w-9 shrink-0 place-items-center rounded-lg text-caption font-semibold text-on-dark shadow-subtle",
+          signedIn ? "bg-primary" : "bg-muted",
         )}>
           {signedIn ? userName.slice(0, 2).toUpperCase() : "未"}
         </div>
@@ -2592,11 +2592,11 @@ function DesignSidebar({
 
       {!collapsed ? (
         <>
-          <Button className="mt-md w-full rounded-lg" onClick={onCreateList}>
+          <Button className="mt-md w-full rounded-lg shadow-subtle active:translate-y-px" onClick={onCreateList}>
             <Plus size={18} />
             New List
           </Button>
-          <label className="mt-md flex h-10 items-center gap-sm rounded-lg border border-hairline bg-canvas px-sm dark:border-surface-dark-elevated dark:bg-surface-dark">
+          <label className="mt-md flex h-10 items-center gap-sm rounded-lg border border-hairline bg-surface-card px-sm shadow-subtle transition-colors focus-within:border-primary dark:border-surface-dark-elevated dark:bg-surface-dark">
             <Search size={17} className="text-muted" />
             <input
               data-search-input="true"
@@ -2621,11 +2621,11 @@ function DesignSidebar({
               <button
                 key={item.id}
                 className={cn(
-                  "flex h-10 w-full items-center rounded-lg text-left text-title-md transition-colors",
+                  "app-focus-ring flex h-10 w-full items-center rounded-lg text-left text-title-md transition-colors",
                   collapsed ? "justify-center px-xs" : "gap-sm px-sm",
                   active
-                    ? "bg-primary text-on-dark dark:bg-on-dark dark:text-primary"
-                    : "text-body hover:bg-surface-container-high dark:text-on-dark-soft dark:hover:bg-surface-dark",
+                    ? "bg-primary text-on-dark shadow-subtle dark:bg-on-dark dark:text-primary"
+                    : "text-body hover:bg-surface-card dark:text-on-dark-soft dark:hover:bg-surface-dark",
                 )}
                 onClick={() => onSelectSmartView(item.id)}
                 title={item.label}
@@ -2639,7 +2639,7 @@ function DesignSidebar({
         </nav>
 
         <div className="mt-md">
-          {!collapsed ? <div className="px-sm text-caption font-semibold uppercase text-muted">Lists</div> : null}
+          {!collapsed ? <div className="px-sm text-caption font-semibold text-muted">Lists</div> : null}
           <div className="mt-xs space-y-xs">
             {lists.map((list, index) => {
               const ListIcon = [Folder, Briefcase, Home][index % 3];
@@ -2649,9 +2649,9 @@ function DesignSidebar({
                 <button
                   key={list.id}
                   className={cn(
-                    "flex h-10 w-full items-center rounded-lg text-left text-title-md transition-colors",
+                    "app-focus-ring flex h-10 w-full items-center rounded-lg text-left text-title-md transition-colors",
                     collapsed ? "justify-center px-xs" : "gap-sm px-sm",
-                    active ? "bg-primary text-on-dark dark:bg-on-dark dark:text-primary" : listToneClass(list.id, lists, listColorMap, listCustomColorMap),
+                    active ? "bg-primary text-on-dark shadow-subtle dark:bg-on-dark dark:text-primary" : listToneClass(list.id, lists, listColorMap, listCustomColorMap),
                   )}
                   style={!active ? customColorStyle(listCustomColorMap[list.id]) : undefined}
                   onClick={() => onSelectList(list.id)}
@@ -2670,7 +2670,7 @@ function DesignSidebar({
       <div className="shrink-0 border-t border-hairline pt-md dark:border-surface-dark">
         <button
           className={cn(
-            "mb-sm flex h-8 w-full items-center justify-center rounded-lg text-muted hover:bg-surface-container-high dark:hover:bg-surface-dark",
+            "mb-sm flex h-8 w-full items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-card dark:hover:bg-surface-dark",
             collapsed && "h-9",
           )}
           onClick={() => document.getElementById("sidebar-list-scroll")?.scrollBy({ top: 160, behavior: "smooth" })}
@@ -2681,9 +2681,9 @@ function DesignSidebar({
         </button>
         <button
           className={cn(
-            "flex h-10 w-full items-center rounded-lg text-body hover:bg-surface-container-high dark:text-on-dark-soft dark:hover:bg-surface-dark",
+            "app-focus-ring flex h-10 w-full items-center rounded-lg text-body transition-colors hover:bg-surface-card dark:text-on-dark-soft dark:hover:bg-surface-dark",
             collapsed ? "justify-center px-xs" : "gap-sm px-sm",
-            activeView === "archive" && "bg-surface-container-high text-ink dark:bg-surface-dark dark:text-on-dark",
+            activeView === "archive" && "bg-surface-card text-ink shadow-subtle dark:bg-surface-dark dark:text-on-dark",
           )}
           onClick={() => onUtilityView("archive")}
           title="Archive and trash"
@@ -2693,14 +2693,14 @@ function DesignSidebar({
         </button>
         <div className={cn("mt-sm flex items-center", collapsed ? "flex-col gap-xs" : "justify-between")}>
           <button
-            className={cn("grid h-9 w-9 place-items-center rounded-full hover:bg-surface-container-high", syncClass)}
+            className={cn("app-focus-ring grid h-9 w-9 place-items-center rounded-lg transition-colors hover:bg-surface-card", syncClass)}
             onClick={onSync}
             title={syncMessage}
           >
             <SyncIcon size={19} className={syncState === "syncing" ? "animate-spin" : ""} />
           </button>
           <button
-            className="grid h-9 w-9 place-items-center rounded-full text-muted hover:bg-surface-container-high"
+            className="app-focus-ring grid h-9 w-9 place-items-center rounded-lg text-muted transition-colors hover:bg-surface-card"
             onClick={onToggleCollapsed}
             title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
@@ -2728,16 +2728,16 @@ function DesignTopBar({
   ];
 
   return (
-    <header className="flex h-12 shrink-0 items-center border-b border-hairline bg-canvas px-lg dark:border-surface-dark-elevated dark:bg-surface-dark">
-      <nav className="flex h-full items-end gap-lg">
+    <header className="flex h-14 shrink-0 items-center border-b border-hairline bg-canvas/95 px-lg dark:border-surface-dark-elevated dark:bg-surface-dark">
+      <nav className="inline-flex rounded-lg border border-hairline bg-surface-soft p-1 shadow-subtle dark:border-surface-dark-elevated dark:bg-surface-dark-elevated">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             className={cn(
-              "border-b-2 pb-sm text-title-md transition-colors",
+              "app-focus-ring h-9 rounded-md px-md text-title-md transition-colors",
               activeView === tab.id
-                ? "border-primary text-ink dark:border-on-dark dark:text-on-dark"
-                : "border-transparent text-muted hover:text-ink dark:text-on-dark-soft dark:hover:text-on-dark",
+                ? "bg-canvas text-primary shadow-subtle dark:bg-surface-dark dark:text-on-dark"
+                : "text-muted hover:text-ink dark:text-on-dark-soft dark:hover:text-on-dark",
             )}
             onClick={() => onViewChange(tab.id)}
           >
@@ -2790,10 +2790,13 @@ function ListWorkspace({
   onShowCompletedChange,
 }: ListWorkspaceProps) {
   const completedCount = items.filter((item) => item.kind === "task" && item.task.completed).length;
+  const openTaskCount = items.filter((item) => item.kind === "task" && !item.task.completed).length;
+  const todayCount = items.filter((item) => item.kind === "task" && !item.task.completed && item.task.dueLabel === "today").length;
+  const calendarCount = items.filter((item) => item.kind === "calendar").length;
 
   return (
     <section className="min-w-0 flex-1 overflow-y-auto bg-canvas px-lg py-lg dark:bg-surface-dark">
-      <div className="mx-auto max-w-4xl">
+      <div className="mx-auto max-w-5xl">
         <div className="flex items-start justify-between gap-lg">
           <div>
             <h1 className="font-display text-display-md text-ink dark:text-on-dark">{title}</h1>
@@ -2801,8 +2804,8 @@ function ListWorkspace({
           </div>
           <button
             className={cn(
-              "inline-flex h-9 items-center gap-sm rounded-full border border-hairline px-sm text-body-sm transition-colors",
-              showCompleted ? "bg-primary text-on-dark" : "bg-canvas text-muted hover:text-ink",
+              "app-focus-ring inline-flex h-9 shrink-0 items-center gap-sm rounded-lg border border-hairline px-sm text-body-sm transition-colors active:translate-y-px",
+              showCompleted ? "bg-primary text-on-dark shadow-subtle" : "bg-surface-card text-muted hover:text-ink",
             )}
             onClick={() => onShowCompletedChange(!showCompleted)}
           >
@@ -2813,7 +2816,13 @@ function ListWorkspace({
           </button>
         </div>
 
-        <div className="mt-lg flex h-11 items-center gap-sm rounded-lg border border-hairline bg-surface-soft px-sm dark:border-surface-dark-elevated dark:bg-surface-dark-elevated">
+        <div className="mt-lg grid grid-cols-3 gap-sm">
+          <SummaryTile label={uiText(language, "Open", "未完成")} value={openTaskCount} />
+          <SummaryTile label={uiText(language, "Today", "今天")} value={todayCount} />
+          <SummaryTile label={uiText(language, "Calendar", "日程")} value={calendarCount} />
+        </div>
+
+        <div className="mt-lg flex h-12 items-center gap-sm rounded-xl border border-hairline bg-surface-card px-sm shadow-subtle transition-colors focus-within:border-primary dark:border-surface-dark-elevated dark:bg-surface-dark-elevated">
           <Plus size={20} className="text-muted" />
           <input
             className="min-w-0 flex-1 border-none bg-transparent p-0 text-body-md text-ink outline-none placeholder:text-muted focus:ring-0 dark:text-on-dark"
@@ -2826,7 +2835,7 @@ function ListWorkspace({
             }}
             placeholder="New task"
           />
-          <Button className="h-8 px-sm" onClick={onAddTask}>Add</Button>
+          <Button className="h-8 px-sm active:translate-y-px" onClick={onAddTask}>Add</Button>
         </div>
 
         <div className="mt-lg space-y-sm">
@@ -2891,11 +2900,11 @@ function TaskRow({
     <article
       data-detail-interactive="true"
       className={cn(
-        "rounded-lg border border-hairline p-md shadow-subtle transition-colors dark:border-surface-dark-elevated",
-        toneClass,
-        selected && "border-primary/50 ring-1 ring-primary/30 dark:border-on-dark",
+        "rounded-xl border border-hairline bg-surface-card p-md shadow-subtle transition-all hover:-translate-y-px hover:border-primary/30 hover:shadow-panel dark:border-surface-dark-elevated dark:bg-surface-dark-elevated",
+        !selected && toneClass,
+        selected && "border-primary bg-canvas ring-2 ring-primary/10 dark:border-on-dark dark:bg-surface-dark",
       )}
-      style={toneStyle}
+      style={!selected ? toneStyle : undefined}
     >
       <div className="flex items-start gap-md">
         <CompletionButton completed={task.completed} onClick={onToggle} />
@@ -2909,6 +2918,15 @@ function TaskRow({
         </button>
       </div>
     </article>
+  );
+}
+
+function SummaryTile({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-xl border border-hairline bg-surface-card px-md py-sm shadow-subtle dark:border-surface-dark-elevated dark:bg-surface-dark-elevated">
+      <div className="text-caption text-muted dark:text-on-dark-soft">{label}</div>
+      <div className="mt-xxs text-title-lg text-ink dark:text-on-dark">{value}</div>
+    </div>
   );
 }
 
@@ -2927,8 +2945,8 @@ function CalendarEventRow({
     <article
       data-detail-interactive="true"
       className={cn(
-        "rounded-lg border border-hairline bg-surface p-md shadow-subtle transition-colors dark:border-surface-dark-elevated dark:bg-surface-dark-elevated",
-        selected && "border-primary/50 ring-1 ring-primary/30 dark:border-on-dark",
+        "rounded-xl border border-hairline bg-surface-card p-md shadow-subtle transition-all hover:-translate-y-px hover:border-primary/30 hover:shadow-panel dark:border-surface-dark-elevated dark:bg-surface-dark-elevated",
+        selected && "border-primary ring-2 ring-primary/10 dark:border-on-dark",
       )}
       style={{ borderLeftColor: event.color ?? "#8B5CF6", borderLeftWidth: 4 }}
     >
@@ -3062,13 +3080,16 @@ function TaskDetailsPanel({
   }
 
   return (
-    <aside data-detail-interactive="true" className="hidden w-[380px] shrink-0 flex-col border-l border-hairline bg-surface px-lg py-lg xl:flex dark:border-surface-dark-elevated dark:bg-surface-dark-elevated">
+    <aside data-detail-interactive="true" className="hidden w-[400px] shrink-0 flex-col border-l border-hairline bg-surface-soft px-lg py-lg xl:flex dark:border-surface-dark-elevated dark:bg-surface-dark-elevated">
       <div className="flex shrink-0 items-center justify-between">
-        <button className="grid h-9 w-9 place-items-center rounded-full text-muted hover:bg-surface-container-high" onClick={onClose} title="Close details">
+        <button className="app-focus-ring grid h-9 w-9 place-items-center rounded-lg text-muted transition-colors hover:bg-surface-card" onClick={onClose} title="Close details">
           <X size={18} />
         </button>
+        <span className="rounded-lg border border-hairline bg-surface-card px-sm py-xs text-caption text-muted shadow-subtle dark:border-surface-dark dark:bg-surface-dark">
+          {uiText(language, "Editing", "编辑中")}
+        </span>
         <div className="flex items-center gap-xs">
-          <button className="grid h-9 w-9 place-items-center rounded-full text-error hover:bg-error-container/30" onClick={onDeleteTask} title="Delete task">
+          <button className="app-focus-ring grid h-9 w-9 place-items-center rounded-lg text-error transition-colors hover:bg-error-container/30" onClick={onDeleteTask} title="Delete task">
             <Trash2 size={18} />
           </button>
         </div>
@@ -3079,7 +3100,7 @@ function TaskDetailsPanel({
         <textarea
           ref={titleRef}
           rows={1}
-          className="min-h-[48px] max-h-40 w-full resize-none overflow-y-auto rounded-lg border border-hairline bg-canvas px-md py-sm text-body-md font-semibold text-ink outline-none focus:border-primary dark:border-surface-dark dark:bg-surface-dark dark:text-on-dark"
+          className="min-h-[56px] max-h-40 w-full resize-none overflow-y-auto rounded-xl border border-hairline bg-surface-card px-md py-sm text-title-lg text-ink outline-none transition-colors focus:border-primary dark:border-surface-dark dark:bg-surface-dark dark:text-on-dark"
           value={task.title}
           onChange={(event) => {
             const title = event.target.value;
@@ -3090,7 +3111,7 @@ function TaskDetailsPanel({
         <textarea
           ref={notesRef}
           rows={6}
-          className="min-h-[220px] max-h-[420px] w-full resize-none overflow-y-auto rounded-lg border border-hairline bg-canvas px-md py-sm text-body-md text-ink outline-none focus:border-primary dark:border-surface-dark dark:bg-surface-dark dark:text-on-dark"
+          className="min-h-[220px] max-h-[420px] w-full resize-none overflow-y-auto rounded-xl border border-hairline bg-surface-card px-md py-sm text-body-md text-ink outline-none transition-colors focus:border-primary dark:border-surface-dark dark:bg-surface-dark dark:text-on-dark"
           value={task.notes}
           onChange={(event) => {
             const notes = event.target.value;
@@ -3102,7 +3123,7 @@ function TaskDetailsPanel({
         <div className="grid grid-cols-[36px_1fr] items-center gap-md">
           <ListChecks size={20} className="text-muted" />
           <select
-            className="h-10 rounded-lg border border-hairline bg-canvas px-sm text-body-md outline-none focus:border-primary dark:border-surface-dark dark:bg-surface-dark dark:text-on-dark"
+            className="h-10 rounded-lg border border-hairline bg-surface-card px-sm text-body-md outline-none transition-colors focus:border-primary dark:border-surface-dark dark:bg-surface-dark dark:text-on-dark"
             value={task.listId}
             onChange={(event) => onChangeTaskList(task.id, event.target.value)}
           >
@@ -3118,7 +3139,7 @@ function TaskDetailsPanel({
             <div className="flex gap-sm">
             <input
               type="date"
-              className="h-10 min-w-0 flex-1 rounded-lg border border-hairline bg-canvas px-sm text-body-md outline-none focus:border-primary dark:border-surface-dark dark:bg-surface-dark dark:text-on-dark"
+              className="h-10 min-w-0 flex-1 rounded-lg border border-hairline bg-surface-card px-sm text-body-md outline-none transition-colors focus:border-primary dark:border-surface-dark dark:bg-surface-dark dark:text-on-dark"
               value={inputDateValue(task)}
               onChange={(event) => {
                 const value = event.target.value;
@@ -3193,7 +3214,7 @@ function TaskDetailsPanel({
       </div>
 
       <div className="mt-md shrink-0 border-t border-hairline pt-md dark:border-surface-dark">
-        <div className="flex items-center gap-sm text-body-sm">
+        <div className="flex items-center gap-sm rounded-xl border border-hairline bg-surface-card px-sm py-sm text-body-sm shadow-subtle dark:border-surface-dark dark:bg-surface-dark">
           {saveState === "saving" ? <RefreshCw size={17} className="animate-spin text-muted" /> : null}
           {saveState === "saved" ? <Check size={17} className="text-success" /> : null}
           {saveState === "error" ? <X size={17} className="text-error" /> : null}
@@ -3300,12 +3321,15 @@ function CalendarEventDetailsPanel({
   };
 
   return (
-    <aside data-detail-interactive="true" className="hidden w-[380px] shrink-0 flex-col border-l border-hairline bg-surface px-lg py-lg xl:flex dark:border-surface-dark-elevated dark:bg-surface-dark-elevated">
+    <aside data-detail-interactive="true" className="hidden w-[400px] shrink-0 flex-col border-l border-hairline bg-surface-soft px-lg py-lg xl:flex dark:border-surface-dark-elevated dark:bg-surface-dark-elevated">
       <div className="flex shrink-0 items-center justify-between">
-        <button className="grid h-9 w-9 place-items-center rounded-full text-muted hover:bg-surface-container-high" onClick={onClose} title="Close details">
+        <button className="app-focus-ring grid h-9 w-9 place-items-center rounded-lg text-muted transition-colors hover:bg-surface-card" onClick={onClose} title="Close details">
           <X size={18} />
         </button>
-        <button className="grid h-9 w-9 place-items-center rounded-full text-error hover:bg-error-container/30" onClick={onDeleteEvent} title="Delete calendar event">
+        <span className="rounded-lg border border-hairline bg-surface-card px-sm py-xs text-caption text-muted shadow-subtle dark:border-surface-dark dark:bg-surface-dark">
+          {uiText(language, "Calendar event", "日程")}
+        </span>
+        <button className="app-focus-ring grid h-9 w-9 place-items-center rounded-lg text-error transition-colors hover:bg-error-container/30" onClick={onDeleteEvent} title="Delete calendar event">
           <Trash2 size={18} />
         </button>
       </div>
@@ -3321,7 +3345,7 @@ function CalendarEventDetailsPanel({
           <textarea
             ref={titleRef}
             rows={1}
-            className="min-h-[48px] max-h-40 w-full resize-none overflow-y-auto rounded-lg border border-hairline bg-canvas px-md py-sm text-body-md font-semibold text-ink outline-none focus:border-primary dark:border-surface-dark dark:bg-surface-dark dark:text-on-dark"
+            className="min-h-[56px] max-h-40 w-full resize-none overflow-y-auto rounded-xl border border-hairline bg-surface-card px-md py-sm text-title-lg text-ink outline-none transition-colors focus:border-primary dark:border-surface-dark dark:bg-surface-dark dark:text-on-dark"
             value={event.title}
             onChange={(input) => onUpdateEvent(eventId, { title: input.target.value })}
             placeholder={uiText(language, "Event title", "日程标题")}
@@ -3329,7 +3353,7 @@ function CalendarEventDetailsPanel({
           <textarea
             ref={notesRef}
             rows={8}
-            className="min-h-[260px] max-h-[420px] w-full resize-none overflow-y-auto rounded-lg border border-hairline bg-canvas px-md py-sm text-body-md text-ink outline-none focus:border-primary dark:border-surface-dark dark:bg-surface-dark dark:text-on-dark"
+            className="min-h-[260px] max-h-[420px] w-full resize-none overflow-y-auto rounded-xl border border-hairline bg-surface-card px-md py-sm text-body-md text-ink outline-none transition-colors focus:border-primary dark:border-surface-dark dark:bg-surface-dark dark:text-on-dark"
             value={event.description ?? ""}
             onChange={(input) => onUpdateEvent(eventId, { description: input.target.value })}
             placeholder={uiText(language, "Description", "描述")}
@@ -3339,7 +3363,7 @@ function CalendarEventDetailsPanel({
             <CalendarDays size={20} className="text-muted" />
             <input
               type="date"
-              className="h-10 min-w-0 rounded-lg border border-hairline bg-canvas px-sm text-body-md outline-none focus:border-primary dark:border-surface-dark dark:bg-surface-dark dark:text-on-dark"
+              className="h-10 min-w-0 rounded-lg border border-hairline bg-surface-card px-sm text-body-md outline-none transition-colors focus:border-primary dark:border-surface-dark dark:bg-surface-dark dark:text-on-dark"
               value={dateValue}
               onChange={(input) => updateEventDateTime(input.target.value || localDate(0), timeValue)}
             />
@@ -3373,7 +3397,7 @@ function CalendarEventDetailsPanel({
       </div>
 
       <div className="mt-md shrink-0 border-t border-hairline pt-md dark:border-surface-dark">
-        <div className="flex items-center gap-sm text-body-sm">
+        <div className="flex items-center gap-sm rounded-xl border border-hairline bg-surface-card px-sm py-sm text-body-sm shadow-subtle dark:border-surface-dark dark:bg-surface-dark">
           {saveState === "saving" ? <RefreshCw size={17} className="animate-spin text-muted" /> : null}
           {saveState === "saved" ? <Check size={17} className="text-success" /> : null}
           {saveState === "error" ? <X size={17} className="text-error" /> : null}
@@ -3429,19 +3453,19 @@ function BoardWorkspace({ tasks, lists, listColorMap, listCustomColorMap, onSele
       </div>
       <div className="mt-lg grid min-w-[760px] grid-cols-3 gap-lg">
         {columns.map((column) => (
-          <div key={column.id} className="rounded-lg border border-hairline bg-surface p-md dark:border-surface-dark-elevated dark:bg-surface-dark-elevated">
+          <div key={column.id} className="rounded-xl border border-hairline bg-surface-soft p-md shadow-subtle dark:border-surface-dark-elevated dark:bg-surface-dark-elevated">
             <div className="flex items-center justify-between">
               <h2 className="text-title-lg text-ink dark:text-on-dark">{column.title}</h2>
               <Badge>{column.tasks.length}</Badge>
             </div>
             <div className="mt-md space-y-sm">
               {column.tasks.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-hairline p-md text-body-sm text-muted">No tasks</div>
+                <div className="rounded-xl border border-dashed border-hairline bg-surface-card p-md text-body-sm text-muted">No tasks</div>
               ) : (
                 column.tasks.map((task) => (
                   <button
                     key={task.id}
-                    className={cn("w-full rounded-lg p-md text-left shadow-subtle hover:ring-1 hover:ring-primary", listToneClass(task.listId, lists, listColorMap, listCustomColorMap))}
+                    className={cn("app-focus-ring w-full rounded-xl p-md text-left shadow-subtle transition-all hover:-translate-y-px hover:ring-1 hover:ring-primary", listToneClass(task.listId, lists, listColorMap, listCustomColorMap))}
                     style={customColorStyle(listCustomColorMap[task.listId])}
                     onClick={() => onSelectTask(task.id)}
                   >
@@ -3529,8 +3553,8 @@ function CalendarWorkspace({
         </div>
       </div>
 
-      <div className="mt-lg grid grid-cols-[1fr_280px] gap-lg">
-        <div className="grid grid-cols-7 overflow-hidden rounded-lg border border-hairline bg-surface dark:border-surface-dark-elevated dark:bg-surface-dark-elevated">
+      <div className="mt-lg grid grid-cols-[1fr_300px] gap-lg">
+        <div className="grid grid-cols-7 overflow-hidden rounded-xl border border-hairline bg-surface-card shadow-subtle dark:border-surface-dark-elevated dark:bg-surface-dark-elevated">
           {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
             <div key={day} className="border-b border-hairline px-sm py-sm text-caption font-semibold uppercase text-muted dark:border-surface-dark">{day}</div>
           ))}
@@ -3543,13 +3567,13 @@ function CalendarWorkspace({
               ? events.filter((event) => calendarEventOccursOnDate(event, cellDate))
               : [];
             return (
-              <div key={`${day ?? "blank"}-${index}`} className="min-h-24 border-b border-r border-hairline p-sm dark:border-surface-dark">
+              <div key={`${day ?? "blank"}-${index}`} className="min-h-24 border-b border-r border-hairline bg-canvas/60 p-sm dark:border-surface-dark">
                 <div className="text-caption text-muted">{day ?? ""}</div>
                 <div className="mt-xs space-y-xs">
                   {dayEvents.slice(0, 2).map((event) => (
                     <button
                       key={event.id}
-                      className="block w-full truncate rounded px-xs py-xxs text-left text-caption text-ink hover:ring-1 hover:ring-primary dark:text-on-dark"
+                      className="block w-full truncate rounded-md px-xs py-xxs text-left text-caption text-ink transition-colors hover:ring-1 hover:ring-primary dark:text-on-dark"
                       style={{
                         backgroundColor: event.color ? `${event.color}26` : undefined,
                         borderLeft: `3px solid ${event.color ?? "#8B5CF6"}`,
@@ -3566,7 +3590,7 @@ function CalendarWorkspace({
                   {dayTasks.slice(0, 3).map((task) => (
                     <button
                       key={task.id}
-                      className={cn("block w-full truncate rounded px-xs py-xxs text-left text-caption hover:ring-1 hover:ring-primary", listToneClass(task.listId, lists, listColorMap, listCustomColorMap, true))}
+                      className={cn("block w-full truncate rounded-md px-xs py-xxs text-left text-caption transition-colors hover:ring-1 hover:ring-primary", listToneClass(task.listId, lists, listColorMap, listCustomColorMap, true))}
                       style={customColorStyle(listCustomColorMap[task.listId], "pill")}
                       onClick={() => onSelectTask(task.id)}
                     >
@@ -3584,14 +3608,14 @@ function CalendarWorkspace({
           </h2>
           <div className="mt-md space-y-sm">
             {monthlyEvents.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-hairline p-md text-body-sm text-muted">
+                <div className="rounded-xl border border-dashed border-hairline bg-surface-card p-md text-body-sm text-muted">
                 {uiText(language, "No Google Calendar schedules in this month.", "这个月没有 Google Calendar 日程。")}
               </div>
             ) : (
               monthlyEvents.slice(0, 10).map((event) => (
                 <div
                   key={event.id}
-                  className="rounded-lg border border-hairline bg-surface p-md dark:border-surface-dark dark:bg-surface-dark"
+                  className="rounded-xl border border-hairline bg-surface-card p-md shadow-subtle dark:border-surface-dark dark:bg-surface-dark"
                   style={{
                     borderLeftColor: event.color ?? "#8B5CF6",
                     borderLeftWidth: 4,
@@ -3624,7 +3648,7 @@ function CalendarWorkspace({
               unscheduled.map((task) => (
                 <button
                   key={task.id}
-                  className={cn("w-full rounded-lg p-md text-left shadow-subtle hover:ring-1 hover:ring-primary", listToneClass(task.listId, lists, listColorMap, listCustomColorMap))}
+                  className={cn("app-focus-ring w-full rounded-xl p-md text-left shadow-subtle transition-all hover:-translate-y-px hover:ring-1 hover:ring-primary", listToneClass(task.listId, lists, listColorMap, listCustomColorMap))}
                   style={customColorStyle(listCustomColorMap[task.listId])}
                   onClick={() => onSelectTask(task.id)}
                 >
@@ -4015,7 +4039,7 @@ function EmptyState({ title, description }: { title: string; description: string
 
 function CompletionButton({ completed, onClick }: { completed: boolean; onClick: () => void }) {
   return (
-    <button className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full text-muted hover:text-primary" onClick={onClick}>
+    <button className="app-focus-ring mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full text-muted transition-colors hover:text-primary active:scale-95" onClick={onClick}>
       <CompletionGlyph completed={completed} />
     </button>
   );
