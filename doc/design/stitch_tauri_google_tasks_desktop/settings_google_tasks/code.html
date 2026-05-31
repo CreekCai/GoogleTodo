@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Settings Modal - Tasks Client</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Manrope:wght@700;800&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "secondary": "#0058be",
+                        "surface-dark-elevated": "#1a1a1a",
+                        "secondary-fixed-dim": "#adc6ff",
+                        "on-primary": "#ffffff",
+                        "error": "#ef4444",
+                        "surface-container-low": "#f7f3f2",
+                        "surface-container-high": "#ebe7e6",
+                        "surface-container-lowest": "#ffffff",
+                        "error-container": "#ffdad6",
+                        "tertiary-container": "#1d1b1a",
+                        "body": "#374151",
+                        "canvas": "#ffffff",
+                        "primary-fixed-dim": "#c8c6c5",
+                        "surface-bright": "#fdf8f8",
+                        "surface": "#fdf8f8",
+                        "surface-container-highest": "#e5e2e1",
+                        "on-error-container": "#93000a",
+                        "primary-fixed": "#e5e2e1",
+                        "hairline": "#e5e7eb",
+                        "surface-strong": "#e5e7eb",
+                        "muted-soft": "#898989",
+                        "on-primary-container": "#858383",
+                        "badge-emerald": "#34d399",
+                        "on-secondary": "#ffffff",
+                        "on-tertiary-fixed": "#1d1b1a",
+                        "secondary-container": "#2170e4",
+                        "surface-tint": "#5f5e5e",
+                        "primary": "#000000",
+                        "on-background": "#1c1b1b",
+                        "on-primary-fixed-variant": "#474646",
+                        "surface-soft": "#f8f9fa",
+                        "hairline-soft": "#f3f4f6",
+                        "success": "#10b981",
+                        "on-secondary-fixed-variant": "#004395",
+                        "background": "#fdf8f8",
+                        "surface-container": "#f1edec",
+                        "on-error": "#ffffff",
+                        "outline": "#747878",
+                        "on-tertiary": "#ffffff",
+                        "on-primary-fixed": "#1c1b1b",
+                        "on-tertiary-fixed-variant": "#484645",
+                        "primary-container": "#1c1b1b",
+                        "on-surface-variant": "#444748",
+                        "badge-orange": "#fb923c",
+                        "inverse-on-surface": "#f4f0ef",
+                        "on-dark": "#ffffff",
+                        "on-tertiary-container": "#868381",
+                        "on-surface": "#1c1b1b",
+                        "surface-dim": "#ddd9d8",
+                        "badge-pink": "#ec4899",
+                        "badge-violet": "#8b5cf6",
+                        "tertiary-fixed-dim": "#cac6c3",
+                        "secondary-fixed": "#d8e2ff",
+                        "inverse-primary": "#c8c6c5",
+                        "ink": "#111111",
+                        "outline-variant": "#c4c7c7",
+                        "on-secondary-fixed": "#001a42",
+                        "on-secondary-container": "#fefcff",
+                        "surface-dark": "#101010",
+                        "tertiary": "#000000",
+                        "inverse-surface": "#313030",
+                        "surface-variant": "#e5e2e1",
+                        "surface-card": "#f5f5f5",
+                        "warning": "#f59e0b",
+                        "tertiary-fixed": "#e6e1df",
+                        "on-dark-soft": "#a1a1aa",
+                        "muted": "#6b7280"
+                    },
+                    borderRadius: {
+                        DEFAULT: "0.25rem",
+                        lg: "0.5rem",
+                        xl: "0.75rem",
+                        full: "9999px"
+                    },
+                    spacing: {
+                        md: "16px",
+                        section: "96px",
+                        lg: "24px",
+                        sm: "12px",
+                        xs: "8px",
+                        xl: "32px",
+                        xxl: "48px",
+                        xxs: "4px"
+                    },
+                    fontFamily: {
+                        "display-lg": ["manrope"],
+                        "display-xl": ["manrope"],
+                        "caption": ["inter"],
+                        "display-xl-mobile": ["manrope"],
+                        "title-md": ["inter"],
+                        "body-md": ["inter"],
+                        "code": ["jetbrainsMono"],
+                        "display-md": ["manrope"],
+                        "title-lg": ["inter"],
+                        "display-sm": ["manrope"],
+                        "body-sm": ["inter"],
+                        "button": ["inter"]
+                    },
+                    fontSize: {
+                        "display-lg": ["48px", { lineHeight: "1.1", letterSpacing: "-1.5px", fontWeight: "700" }],
+                        "display-xl": ["64px", { lineHeight: "1.05", letterSpacing: "-2px", fontWeight: "700" }],
+                        "caption": ["13px", { lineHeight: "1.4", letterSpacing: "0", fontWeight: "500" }],
+                        "display-xl-mobile": ["32px", { lineHeight: "1.1", letterSpacing: "-1px", fontWeight: "700" }],
+                        "title-md": ["18px", { lineHeight: "1.4", letterSpacing: "0", fontWeight: "600" }],
+                        "body-md": ["16px", { lineHeight: "1.5", letterSpacing: "0", fontWeight: "400" }],
+                        "code": ["14px", { lineHeight: "1.5", letterSpacing: "0", fontWeight: "400" }],
+                        "display-md": ["36px", { lineHeight: "1.15", letterSpacing: "-1px", fontWeight: "700" }],
+                        "title-lg": ["22px", { lineHeight: "1.3", letterSpacing: "-0.3px", fontWeight: "600" }],
+                        "display-sm": ["28px", { lineHeight: "1.2", letterSpacing: "-0.5px", fontWeight: "700" }],
+                        "body-sm": ["14px", { lineHeight: "1.5", letterSpacing: "0", fontWeight: "400" }],
+                        "button": ["14px", { lineHeight: "1.0", letterSpacing: "0", fontWeight: "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-surface-dim font-body-md text-on-surface antialiased h-screen w-screen overflow-hidden flex items-center justify-center relative">
+<!-- Dashboard Background Mock -->
+<div class="absolute inset-0 z-0 flex blur-[2px] opacity-40">
+<!-- SideNavBar Mock -->
+<div class="fixed left-0 top-0 h-full w-64 border-r border-hairline bg-surface flex flex-col p-md">
+<div class="font-display-sm text-display-sm font-bold text-primary mb-lg">Task User</div>
+<div class="flex flex-col gap-xs">
+<div class="text-primary font-bold border-r-2 border-primary py-sm px-xs">Today</div>
+<div class="text-muted-soft font-medium py-sm px-xs">Tomorrow</div>
+<div class="text-muted-soft font-medium py-sm px-xs">Past</div>
+</div>
+</div>
+<!-- TopNavBar Mock -->
+<div class="fixed top-0 h-14 border-b border-hairline bg-canvas flex items-center justify-between w-full px-lg ml-64 z-10">
+<div class="font-display-sm text-display-sm font-black text-ink">Tasks Client</div>
+</div>
+</div>
+<!-- Overlay Background -->
+<div class="absolute inset-0 bg-primary/20 backdrop-blur-sm z-40 transition-opacity"></div>
+<!-- Settings Modal -->
+<div class="relative z-50 w-full max-w-3xl bg-canvas rounded-xl shadow-[0_4px_24px_rgba(0,0,0,0.12)] border border-hairline flex flex-col max-h-[921px] overflow-hidden transform transition-transform scale-100">
+<!-- Modal Header -->
+<div class="flex items-center justify-between px-lg py-md border-b border-hairline bg-surface-soft">
+<h2 class="font-title-lg text-title-lg text-ink">Settings</h2>
+<button class="text-muted hover:text-ink transition-colors p-xs rounded-full hover:bg-hairline-soft">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">close</span>
+</button>
+</div>
+<!-- Modal Body (Scrollable) -->
+<div class="flex-1 overflow-y-auto p-xl space-y-xxl">
+<!-- Section 1: Google Account -->
+<section class="space-y-md">
+<h3 class="font-title-md text-title-md text-ink pb-xs border-b border-hairline-soft">Google Account</h3>
+<div class="bg-surface-card rounded-lg p-lg border border-hairline flex items-start justify-between">
+<div class="flex items-center gap-md">
+<div class="w-12 h-12 rounded-full bg-badge-emerald flex items-center justify-center text-on-dark font-title-md">
+                            TU
+                        </div>
+<div>
+<div class="font-title-md text-title-md text-ink">Task User</div>
+<div class="font-body-sm text-body-sm text-muted">user@google.com</div>
+<div class="font-caption text-caption text-success mt-xs flex items-center gap-xxs">
+<span class="material-symbols-outlined text-[14px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                                Last synced: 2 minutes ago
+                            </div>
+</div>
+</div>
+<div class="flex flex-col gap-sm items-end">
+<button class="bg-primary text-on-dark font-button text-button py-sm px-md rounded hover:bg-surface-dark-elevated transition-colors">
+                            Sync Now
+                        </button>
+<button class="bg-canvas border border-hairline text-ink font-button text-button py-sm px-md rounded hover:bg-surface-soft transition-colors">
+                            Unbind Account
+                        </button>
+</div>
+</div>
+</section>
+<!-- Section 2: Hotkeys -->
+<section class="space-y-md">
+<div class="flex items-center justify-between pb-xs border-b border-hairline-soft">
+<h3 class="font-title-md text-title-md text-ink">Hotkeys</h3>
+<button class="text-muted hover:text-ink font-caption text-caption transition-colors">Reset Defaults</button>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-sm">
+<!-- Hotkey Item -->
+<div class="flex items-center justify-between p-sm rounded-lg bg-surface hover:bg-surface-soft border border-transparent hover:border-hairline transition-all">
+<span class="font-body-sm text-body-sm text-body">New Task</span>
+<div class="flex gap-xxs">
+<kbd class="font-code text-code text-ink bg-surface-card border border-hairline rounded px-xs py-1 shadow-sm">Ctrl</kbd>
+<span class="text-muted font-body-sm">+</span>
+<kbd class="font-code text-code text-ink bg-surface-card border border-hairline rounded px-xs py-1 shadow-sm">N</kbd>
+</div>
+</div>
+<!-- Hotkey Item -->
+<div class="flex items-center justify-between p-sm rounded-lg bg-surface hover:bg-surface-soft border border-transparent hover:border-hairline transition-all">
+<span class="font-body-sm text-body-sm text-body">Search</span>
+<div class="flex gap-xxs">
+<kbd class="font-code text-code text-ink bg-surface-card border border-hairline rounded px-xs py-1 shadow-sm">Ctrl</kbd>
+<span class="text-muted font-body-sm">+</span>
+<kbd class="font-code text-code text-ink bg-surface-card border border-hairline rounded px-xs py-1 shadow-sm">F</kbd>
+</div>
+</div>
+<!-- Hotkey Item -->
+<div class="flex items-center justify-between p-sm rounded-lg bg-surface hover:bg-surface-soft border border-transparent hover:border-hairline transition-all">
+<span class="font-body-sm text-body-sm text-body">Settings</span>
+<div class="flex gap-xxs">
+<kbd class="font-code text-code text-ink bg-surface-card border border-hairline rounded px-xs py-1 shadow-sm">Ctrl</kbd>
+<span class="text-muted font-body-sm">+</span>
+<kbd class="font-code text-code text-ink bg-surface-card border border-hairline rounded px-xs py-1 shadow-sm">,</kbd>
+</div>
+</div>
+</div>
+</section>
+<!-- Section 3: Appearance -->
+<section class="space-y-md">
+<h3 class="font-title-md text-title-md text-ink pb-xs border-b border-hairline-soft">Appearance</h3>
+<div class="inline-flex bg-surface-soft p-xxs rounded-full border border-hairline">
+<button class="px-lg py-xs rounded-full font-button text-button text-muted hover:text-ink transition-colors">
+                        Light
+                    </button>
+<button class="px-lg py-xs rounded-full font-button text-button bg-canvas text-ink shadow-[0_1px_2px_rgba(0,0,0,0.05)] border border-hairline transition-all">
+                        Dark
+                    </button>
+<button class="px-lg py-xs rounded-full font-button text-button text-muted hover:text-ink transition-colors">
+                        System
+                    </button>
+</div>
+</section>
+<!-- Section 4: Task Display -->
+<section class="space-y-md">
+<h3 class="font-title-md text-title-md text-ink pb-xs border-b border-hairline-soft">Task Display</h3>
+<div class="space-y-sm">
+<!-- Toggle Item -->
+<label class="flex items-center justify-between p-sm hover:bg-surface-soft rounded-lg cursor-pointer transition-colors group">
+<span class="font-body-sm text-body-sm text-body group-hover:text-ink transition-colors">Show completed tasks</span>
+<div class="relative inline-flex h-6 w-11 items-center rounded-full bg-primary transition-colors">
+<span class="inline-block h-4 w-4 transform rounded-full bg-canvas translate-x-6 transition-transform"></span>
+</div>
+</label>
+<!-- Toggle Item -->
+<label class="flex items-center justify-between p-sm hover:bg-surface-soft rounded-lg cursor-pointer transition-colors group">
+<span class="font-body-sm text-body-sm text-body group-hover:text-ink transition-colors">Show task count</span>
+<div class="relative inline-flex h-6 w-11 items-center rounded-full bg-primary transition-colors">
+<span class="inline-block h-4 w-4 transform rounded-full bg-canvas translate-x-6 transition-transform"></span>
+</div>
+</label>
+<!-- Toggle Item -->
+<label class="flex items-center justify-between p-sm hover:bg-surface-soft rounded-lg cursor-pointer transition-colors group">
+<span class="font-body-sm text-body-sm text-body group-hover:text-ink transition-colors">Expand subtasks</span>
+<div class="relative inline-flex h-6 w-11 items-center rounded-full bg-surface-strong transition-colors border border-hairline">
+<span class="inline-block h-4 w-4 transform rounded-full bg-canvas translate-x-1 transition-transform border border-hairline shadow-sm"></span>
+</div>
+</label>
+</div>
+</section>
+<!-- Section 5: About -->
+<section class="space-y-md mt-xxl pt-xl border-t border-hairline-soft">
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-muted" style="font-variation-settings: 'FILL' 1;">info</span>
+<h3 class="font-title-md text-title-md text-ink">About</h3>
+</div>
+<div class="bg-surface p-md rounded-lg border border-hairline">
+<p class="font-body-sm text-body-sm text-body">
+<span class="font-bold text-ink">Tasks Pro v1.0.0</span>. A high-performance Google Tasks client built with Tauri, React, and TypeScript.
+                    </p>
+</div>
+</section>
+</div>
+</div>
+</body></html>

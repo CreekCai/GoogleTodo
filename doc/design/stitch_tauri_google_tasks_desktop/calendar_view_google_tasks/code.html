@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Google Tasks Pro - Calendar View</title>
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400&amp;family=Manrope:wght@700&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Theme Configuration -->
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "muted-soft": "#898989",
+                        "on-primary": "#ffffff",
+                        "primary": "#000000",
+                        "on-tertiary": "#ffffff",
+                        "error-container": "#ffdad6",
+                        "badge-pink": "#ec4899",
+                        "tertiary-container": "#1d1b1a",
+                        "on-secondary": "#ffffff",
+                        "canvas": "#ffffff",
+                        "on-surface": "#1c1b1b",
+                        "on-background": "#1c1b1b",
+                        "on-tertiary-fixed-variant": "#484645",
+                        "on-primary-fixed": "#1c1b1b",
+                        "muted": "#6b7280",
+                        "surface-soft": "#f8f9fa",
+                        "surface-container-lowest": "#ffffff",
+                        "surface-dark": "#101010",
+                        "on-dark": "#ffffff",
+                        "ink": "#111111",
+                        "hairline-soft": "#f3f4f6",
+                        "on-error": "#ffffff",
+                        "hairline": "#e5e7eb",
+                        "warning": "#f59e0b",
+                        "secondary-fixed": "#d8e2ff",
+                        "badge-orange": "#fb923c",
+                        "tertiary-fixed-dim": "#cac6c3",
+                        "body": "#374151",
+                        "badge-emerald": "#34d399",
+                        "background": "#fdf8f8",
+                        "on-primary-fixed-variant": "#474646",
+                        "on-dark-soft": "#a1a1aa",
+                        "inverse-primary": "#c8c6c5",
+                        "primary-fixed": "#e5e2e1",
+                        "on-surface-variant": "#444748",
+                        "secondary-container": "#2170e4",
+                        "surface-variant": "#e5e2e1",
+                        "on-secondary-container": "#fefcff",
+                        "outline-variant": "#c4c7c7",
+                        "outline": "#747878",
+                        "tertiary-fixed": "#e6e1df",
+                        "tertiary": "#000000",
+                        "surface-bright": "#fdf8f8",
+                        "surface-tint": "#5f5e5e",
+                        "on-tertiary-fixed": "#1d1b1a",
+                        "surface-dim": "#ddd9d8",
+                        "primary-fixed-dim": "#c8c6c5",
+                        "on-tertiary-container": "#868381",
+                        "surface-container-low": "#f7f3f2",
+                        "surface-container-highest": "#e5e2e1",
+                        "error": "#ef4444",
+                        "secondary-fixed-dim": "#adc6ff",
+                        "surface-strong": "#e5e7eb",
+                        "surface-card": "#f5f5f5",
+                        "success": "#10b981",
+                        "primary-container": "#1c1b1b",
+                        "surface-container-high": "#ebe7e6",
+                        "inverse-surface": "#313030",
+                        "on-primary-container": "#858383",
+                        "surface-dark-elevated": "#1a1a1a",
+                        "inverse-on-surface": "#f4f0ef",
+                        "on-error-container": "#93000a",
+                        "badge-violet": "#8b5cf6",
+                        "on-secondary-fixed-variant": "#004395",
+                        "secondary": "#0058be",
+                        "on-secondary-fixed": "#001a42",
+                        "surface-container": "#f1edec",
+                        "surface": "#fdf8f8"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "xxl": "48px",
+                        "xs": "8px",
+                        "section": "96px",
+                        "xxs": "4px",
+                        "sm": "12px",
+                        "xl": "32px",
+                        "lg": "24px",
+                        "md": "16px"
+                    },
+                    "fontFamily": {
+                        "code": ["jetbrainsMono"],
+                        "display-xl-mobile": ["manrope"],
+                        "body-sm": ["inter"],
+                        "display-sm": ["manrope"],
+                        "display-md": ["manrope"],
+                        "display-lg": ["manrope"],
+                        "display-xl": ["manrope"],
+                        "button": ["inter"],
+                        "title-lg": ["inter"],
+                        "caption": ["inter"],
+                        "body-md": ["inter"],
+                        "title-md": ["inter"]
+                    },
+                    "fontSize": {
+                        "code": ["14px", { "lineHeight": "1.5", "letterSpacing": "0", "fontWeight": "400" }],
+                        "display-xl-mobile": ["32px", { "lineHeight": "1.1", "letterSpacing": "-1px", "fontWeight": "700" }],
+                        "body-sm": ["14px", { "lineHeight": "1.5", "letterSpacing": "0", "fontWeight": "400" }],
+                        "display-sm": ["28px", { "lineHeight": "1.2", "letterSpacing": "-0.5px", "fontWeight": "700" }],
+                        "display-md": ["36px", { "lineHeight": "1.15", "letterSpacing": "-1px", "fontWeight": "700" }],
+                        "display-lg": ["48px", { "lineHeight": "1.1", "letterSpacing": "-1.5px", "fontWeight": "700" }],
+                        "display-xl": ["64px", { "lineHeight": "1.05", "letterSpacing": "-2px", "fontWeight": "700" }],
+                        "button": ["14px", { "lineHeight": "1.0", "letterSpacing": "0", "fontWeight": "600" }],
+                        "title-lg": ["22px", { "lineHeight": "1.3", "letterSpacing": "-0.3px", "fontWeight": "600" }],
+                        "caption": ["13px", { "lineHeight": "1.4", "letterSpacing": "0", "fontWeight": "500" }],
+                        "body-md": ["16px", { "lineHeight": "1.5", "letterSpacing": "0", "fontWeight": "400" }],
+                        "title-md": ["18px", { "lineHeight": "1.4", "letterSpacing": "0", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-surface text-body font-body-sm text-body-sm antialiased w-full h-screen overflow-hidden flex">
+<!-- SideNavBar Component -->
+<nav class="bg-surface-container-low dark:bg-surface-dark-elevated text-primary dark:text-on-dark font-title-md text-title-md w-72 h-screen shrink-0 border-r border-hairline dark:border-outline-variant flex flex-col h-full p-md space-y-lg hidden md:flex z-10">
+<!-- Header User Profile -->
+<div class="flex items-center gap-sm px-sm pt-sm">
+<img alt="User profile photo" class="w-10 h-10 rounded-full object-cover border border-hairline" src="https://placeholder.pics/svg/300"/>
+<div class="flex flex-col">
+<span class="font-title-md text-title-md text-primary dark:text-on-dark leading-tight">Alex Miller</span>
+<span class="font-caption text-caption text-muted leading-tight">Product Engineer</span>
+</div>
+<button class="ml-auto text-muted hover:text-primary transition-colors">
+<span class="material-symbols-outlined" data-icon="expand_more">expand_more</span>
+</button>
+</div>
+<!-- Main Navigation Tabs -->
+<div class="flex flex-col space-y-xs flex-1 mt-lg">
+<a class="flex items-center gap-md text-body dark:text-on-dark-soft px-md py-sm hover:bg-surface-container-high dark:hover:bg-surface-container-highest transition-colors active:scale-[0.98] duration-100 rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="search">search</span>
+<span>Search</span>
+</a>
+<a class="flex items-center gap-md bg-primary dark:bg-on-dark text-on-primary dark:text-primary rounded-lg px-md py-sm active:scale-[0.98] transition-transform duration-100" href="#">
+<span class="material-symbols-outlined" data-icon="task_alt" data-weight="fill" style="font-variation-settings: 'FILL' 1;">task_alt</span>
+<span>My Tasks</span>
+</a>
+<a class="flex items-center gap-md text-body dark:text-on-dark-soft px-md py-sm hover:bg-surface-container-high dark:hover:bg-surface-container-highest transition-colors active:scale-[0.98] duration-100 rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="folder">folder</span>
+<span>Project Alpha</span>
+</a>
+<a class="flex items-center gap-md text-body dark:text-on-dark-soft px-md py-sm hover:bg-surface-container-high dark:hover:bg-surface-container-highest transition-colors active:scale-[0.98] duration-100 rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="work_outline">work_outline</span>
+<span>Work</span>
+</a>
+<a class="flex items-center gap-md text-body dark:text-on-dark-soft px-md py-sm hover:bg-surface-container-high dark:hover:bg-surface-container-highest transition-colors active:scale-[0.98] duration-100 rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="home">home</span>
+<span>Personal</span>
+</a>
+</div>
+<!-- CTA Button -->
+<div class="px-xs">
+<button class="w-full bg-surface-soft border border-hairline text-primary font-button text-button py-sm rounded-lg hover:bg-surface-strong transition-colors flex items-center justify-center gap-xs">
+<span class="material-symbols-outlined" data-icon="add">add</span>
+                New List
+            </button>
+</div>
+<!-- Footer Tabs -->
+<div class="flex flex-col space-y-xs pt-lg border-t border-hairline-soft mt-auto">
+<a class="flex items-center gap-md text-body dark:text-on-dark-soft px-md py-sm hover:bg-surface-container-high dark:hover:bg-surface-container-highest transition-colors active:scale-[0.98] duration-100 rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="archive">archive</span>
+<span>Archive</span>
+</a>
+<a class="flex items-center gap-md text-body dark:text-on-dark-soft px-md py-sm hover:bg-surface-container-high dark:hover:bg-surface-container-highest transition-colors active:scale-[0.98] duration-100 rounded-lg text-error hover:text-error" href="#">
+<span class="material-symbols-outlined" data-icon="delete">delete</span>
+<span>Trash</span>
+</a>
+</div>
+</nav>
+<!-- Main Content Area -->
+<main class="flex-1 flex flex-col h-screen overflow-hidden bg-background">
+<!-- TopNavBar Component -->
+<header class="bg-canvas dark:bg-surface-dark font-body-md text-body-md w-full border-b border-hairline dark:border-outline-variant flex justify-between items-center px-lg h-16 shrink-0 z-20">
+<!-- Brand Logo -->
+<div class="flex items-center">
+<span class="text-title-lg font-display-sm font-bold text-primary dark:text-on-dark mr-xl">Google Tasks Pro</span>
+</div>
+<!-- Navigation Links -->
+<nav class="flex space-x-lg h-full items-end pt-1">
+<a class="text-muted dark:text-on-dark-soft pb-3 mt-1 hover:text-ink dark:hover:text-on-dark transition-colors transition-all duration-200 ease-in-out" href="#">List</a>
+<a class="text-muted dark:text-on-dark-soft pb-3 mt-1 hover:text-ink dark:hover:text-on-dark transition-colors transition-all duration-200 ease-in-out" href="#">Board</a>
+<a class="text-primary dark:text-on-dark border-b-2 border-primary dark:border-on-dark pb-3 mt-1 transition-all duration-200 ease-in-out font-title-md text-title-md" href="#">Calendar</a>
+</nav>
+<!-- Trailing Icons -->
+<div class="flex items-center space-x-sm text-muted">
+<button class="p-xs rounded-full hover:bg-surface-soft hover:text-ink transition-colors">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+</button>
+<button class="p-xs rounded-full hover:bg-surface-soft hover:text-ink transition-colors">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+</button>
+<button class="p-xs rounded-full hover:bg-surface-soft hover:text-ink transition-colors">
+<span class="material-symbols-outlined" data-icon="more_vert">more_vert</span>
+</button>
+</div>
+</header>
+<!-- Canvas Area (Calendar + Right Panel) -->
+<div class="flex-1 flex overflow-hidden">
+<!-- Calendar Grid -->
+<div class="flex-1 flex flex-col bg-canvas p-lg overflow-y-auto">
+<!-- Calendar Controls -->
+<div class="flex items-center justify-between mb-lg shrink-0">
+<div class="flex items-center gap-md">
+<h2 class="font-display-sm text-display-sm text-primary">October 2023</h2>
+<div class="flex items-center bg-surface-soft rounded border border-hairline overflow-hidden ml-md">
+<button class="px-sm py-xs hover:bg-surface-strong transition-colors text-muted hover:text-primary">
+<span class="material-symbols-outlined text-[20px]" data-icon="chevron_left">chevron_left</span>
+</button>
+<div class="w-[1px] h-4 bg-hairline"></div>
+<button class="px-sm py-xs hover:bg-surface-strong transition-colors text-muted hover:text-primary text-button font-button">
+                                Today
+                            </button>
+<div class="w-[1px] h-4 bg-hairline"></div>
+<button class="px-sm py-xs hover:bg-surface-strong transition-colors text-muted hover:text-primary">
+<span class="material-symbols-outlined text-[20px]" data-icon="chevron_right">chevron_right</span>
+</button>
+</div>
+</div>
+<div class="flex items-center gap-sm">
+<span class="font-caption text-caption text-muted">View:</span>
+<select class="bg-surface border border-hairline rounded px-sm py-xs text-body-sm font-body-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary">
+<option>Month</option>
+<option>Week</option>
+</select>
+</div>
+</div>
+<!-- The Grid -->
+<div class="flex-1 flex flex-col border border-hairline rounded-lg overflow-hidden bg-surface-lowest">
+<!-- Days Header -->
+<div class="grid grid-cols-7 border-b border-hairline bg-surface-soft shrink-0">
+<div class="py-sm px-md text-right font-caption text-caption text-muted border-r border-hairline">Sun</div>
+<div class="py-sm px-md text-right font-caption text-caption text-muted border-r border-hairline">Mon</div>
+<div class="py-sm px-md text-right font-caption text-caption text-muted border-r border-hairline">Tue</div>
+<div class="py-sm px-md text-right font-caption text-caption text-muted border-r border-hairline">Wed</div>
+<div class="py-sm px-md text-right font-caption text-caption text-muted border-r border-hairline">Thu</div>
+<div class="py-sm px-md text-right font-caption text-caption text-muted border-r border-hairline">Fri</div>
+<div class="py-sm px-md text-right font-caption text-caption text-muted">Sat</div>
+</div>
+<!-- Grid Cells -->
+<div class="flex-1 grid grid-cols-7 grid-rows-5">
+<!-- Row 1 -->
+<div class="border-b border-r border-hairline p-xs min-h-[100px] flex flex-col gap-xxs bg-surface-dim opacity-50">
+<span class="text-right font-caption text-caption text-muted">24</span>
+</div>
+<div class="border-b border-r border-hairline p-xs min-h-[100px] flex flex-col gap-xxs bg-surface-dim opacity-50">
+<span class="text-right font-caption text-caption text-muted">25</span>
+</div>
+<div class="border-b border-r border-hairline p-xs min-h-[100px] flex flex-col gap-xxs bg-surface-dim opacity-50">
+<span class="text-right font-caption text-caption text-muted">26</span>
+</div>
+<div class="border-b border-r border-hairline p-xs min-h-[100px] flex flex-col gap-xxs bg-surface-dim opacity-50">
+<span class="text-right font-caption text-caption text-muted">27</span>
+</div>
+<div class="border-b border-r border-hairline p-xs min-h-[100px] flex flex-col gap-xxs bg-surface-dim opacity-50">
+<span class="text-right font-caption text-caption text-muted">28</span>
+</div>
+<div class="border-b border-r border-hairline p-xs min-h-[100px] flex flex-col gap-xxs bg-surface-dim opacity-50">
+<span class="text-right font-caption text-caption text-muted">29</span>
+</div>
+<div class="border-b border-hairline p-xs min-h-[100px] flex flex-col gap-xxs bg-surface-dim opacity-50">
+<span class="text-right font-caption text-caption text-muted">30</span>
+</div>
+<!-- Row 2 -->
+<div class="border-b border-r border-hairline p-xs min-h-[100px] flex flex-col gap-xxs bg-canvas relative group">
+<span class="text-right font-caption text-caption text-primary group-hover:font-title-md group-hover:text-title-md transition-all">1</span>
+</div>
+<div class="border-b border-r border-hairline p-xs min-h-[100px] flex flex-col gap-xxs bg-canvas">
+<span class="text-right font-caption text-caption text-primary">2</span>
+<div class="bg-badge-orange text-white rounded px-sm py-xxs font-caption text-caption truncate w-[200%] z-10 shadow-[0_1px_2px_rgba(0,0,0,0.05)] cursor-pointer hover:opacity-90">
+                                Q4 Planning Session
+                            </div>
+</div>
+<div class="border-b border-r border-hairline p-xs min-h-[100px] flex flex-col gap-xxs bg-canvas">
+<span class="text-right font-caption text-caption text-primary">3</span>
+</div>
+<div class="border-b border-r border-hairline p-xs min-h-[100px] flex flex-col gap-xxs bg-canvas">
+<span class="text-right font-caption text-caption text-primary">4</span>
+</div>
+<div class="border-b border-r border-hairline p-xs min-h-[100px] flex flex-col gap-xxs bg-canvas">
+<span class="text-right font-caption text-caption text-primary">5</span>
+<div class="bg-secondary text-on-secondary rounded px-sm py-xxs font-caption text-caption truncate cursor-pointer hover:opacity-90">
+                                Design Sync
+                            </div>
+</div>
+<div class="border-b border-r border-hairline p-xs min-h-[100px] flex flex-col gap-xxs bg-canvas bg-surface-soft">
+<span class="text-right font-caption text-caption text-primary">6</span>
+</div>
+<div class="border-b border-hairline p-xs min-h-[100px] flex flex-col gap-xxs bg-canvas bg-surface-soft">
+<span class="text-right font-caption text-caption text-primary">7</span>
+</div>
+<!-- Row 3 -->
+<div class="border-b border-r border-hairline p-xs min-h-[100px] flex flex-col gap-xxs bg-canvas">
+<span class="text-right font-caption text-caption text-primary">8</span>
+</div>
+<div class="border-b border-r border-hairline p-xs min-h-[100px] flex flex-col gap-xxs bg-canvas relative">
+<span class="text-right font-caption text-caption text-primary bg-primary text-on-primary rounded-full w-6 h-6 flex items-center justify-center ml-auto">9</span>
+<div class="bg-badge-violet text-white rounded px-sm py-xxs font-caption text-caption truncate cursor-pointer hover:opacity-90 mt-xs">
+                                Team Offsite
+                            </div>
+<div class="bg-surface-strong text-primary border border-hairline rounded px-sm py-xxs font-caption text-caption truncate cursor-pointer hover:bg-hairline transition-colors">
+                                Architecture Review
+                            </div>
+</div>
+<div class="border-b border-r border-hairline p-xs min-h-[100px] flex flex-col gap-xxs bg-canvas">
+<span class="text-right font-caption text-caption text-primary">10</span>
+</div>
+<div class="border-b border-r border-hairline p-xs min-h-[100px] flex flex-col gap-xxs bg-canvas">
+<span class="text-right font-caption text-caption text-primary">11</span>
+<div class="bg-badge-emerald text-white rounded px-sm py-xxs font-caption text-caption truncate w-[300%] z-10 shadow-[0_1px_2px_rgba(0,0,0,0.05)] cursor-pointer hover:opacity-90">
+                                Feature Freeze &amp; QA
+                            </div>
+</div>
+<div class="border-b border-r border-hairline p-xs min-h-[100px] flex flex-col gap-xxs bg-canvas">
+<span class="text-right font-caption text-caption text-primary">12</span>
+</div>
+<div class="border-b border-r border-hairline p-xs min-h-[100px] flex flex-col gap-xxs bg-canvas">
+<span class="text-right font-caption text-caption text-primary">13</span>
+</div>
+<div class="border-b border-hairline p-xs min-h-[100px] flex flex-col gap-xxs bg-canvas">
+<span class="text-right font-caption text-caption text-primary">14</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Unscheduled Tasks Side Panel -->
+<aside class="w-80 border-l border-hairline bg-surface-soft flex flex-col shrink-0 z-10 shadow-[-4px_0_24px_rgba(0,0,0,0.02)] hidden lg:flex">
+<div class="p-md border-b border-hairline flex items-center justify-between bg-canvas">
+<h3 class="font-title-md text-title-md text-primary">Unscheduled Tasks</h3>
+<button class="text-muted hover:text-primary transition-colors p-xs rounded hover:bg-surface-soft">
+<span class="material-symbols-outlined text-[20px]" data-icon="filter_list">filter_list</span>
+</button>
+</div>
+<div class="flex-1 overflow-y-auto p-md flex flex-col gap-sm">
+<!-- Search Input -->
+<div class="relative mb-sm">
+<span class="material-symbols-outlined absolute left-sm top-1/2 -translate-y-1/2 text-muted text-[18px]" data-icon="search">search</span>
+<input class="w-full bg-canvas border border-hairline rounded-lg pl-xl pr-sm py-xs font-body-sm text-body-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary placeholder-muted shadow-[0_1px_2px_rgba(0,0,0,0.02)]" placeholder="Find tasks..." type="text"/>
+</div>
+<!-- Task Cards -->
+<div class="bg-canvas border border-hairline rounded-lg p-sm shadow-[0_1px_2px_rgba(0,0,0,0.03)] flex gap-sm cursor-grab hover:border-outline-variant transition-colors group">
+<span class="material-symbols-outlined text-muted opacity-0 group-hover:opacity-100 transition-opacity mt-xs cursor-grab" data-icon="drag_indicator">drag_indicator</span>
+<div class="flex flex-col gap-xxs flex-1">
+<span class="font-title-sm text-title-sm text-primary font-medium">Update User Documentation</span>
+<div class="flex items-center gap-xs mt-xs">
+<span class="bg-surface-strong px-xs py-[2px] rounded text-[11px] font-caption text-body uppercase tracking-wide">Tech Debt</span>
+</div>
+</div>
+</div>
+<div class="bg-canvas border border-hairline rounded-lg p-sm shadow-[0_1px_2px_rgba(0,0,0,0.03)] flex gap-sm cursor-grab hover:border-outline-variant transition-colors group">
+<span class="material-symbols-outlined text-muted opacity-0 group-hover:opacity-100 transition-opacity mt-xs cursor-grab" data-icon="drag_indicator">drag_indicator</span>
+<div class="flex flex-col gap-xxs flex-1">
+<span class="font-title-sm text-title-sm text-primary font-medium">Review Analytics PR</span>
+<div class="flex items-center gap-xs mt-xs">
+<img alt="Avatar" class="w-5 h-5 rounded-full bg-surface-dim" src="https://placeholder.pics/svg/300"/>
+<span class="text-[12px] font-caption text-muted">Waiting on Dev</span>
+</div>
+</div>
+</div>
+<div class="bg-canvas border border-hairline rounded-lg p-sm shadow-[0_1px_2px_rgba(0,0,0,0.03)] flex gap-sm cursor-grab hover:border-outline-variant transition-colors group">
+<span class="material-symbols-outlined text-muted opacity-0 group-hover:opacity-100 transition-opacity mt-xs cursor-grab" data-icon="drag_indicator">drag_indicator</span>
+<div class="flex flex-col gap-xxs flex-1">
+<span class="font-title-sm text-title-sm text-primary font-medium">Draft Q1 Roadmap</span>
+<div class="flex items-center justify-between mt-xs w-full">
+<span class="bg-badge-pink text-white px-xs py-[2px] rounded text-[11px] font-caption uppercase tracking-wide">High Priority</span>
+</div>
+</div>
+</div>
+</div>
+</aside>
+</div>
+</main>
+</body></html>

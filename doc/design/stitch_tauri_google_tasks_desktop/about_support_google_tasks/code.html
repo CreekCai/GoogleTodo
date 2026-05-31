@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Google Tasks Pro - About &amp; Support</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Manrope:wght@700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "muted-soft": "#898989",
+                        "on-primary": "#ffffff",
+                        "primary": "#000000",
+                        "on-tertiary": "#ffffff",
+                        "error-container": "#ffdad6",
+                        "badge-pink": "#ec4899",
+                        "tertiary-container": "#1d1b1a",
+                        "on-secondary": "#ffffff",
+                        "canvas": "#ffffff",
+                        "on-surface": "#1c1b1b",
+                        "on-background": "#1c1b1b",
+                        "on-tertiary-fixed-variant": "#484645",
+                        "on-primary-fixed": "#1c1b1b",
+                        "muted": "#6b7280",
+                        "surface-soft": "#f8f9fa",
+                        "surface-container-lowest": "#ffffff",
+                        "surface-dark": "#101010",
+                        "on-dark": "#ffffff",
+                        "ink": "#111111",
+                        "hairline-soft": "#f3f4f6",
+                        "on-error": "#ffffff",
+                        "hairline": "#e5e7eb",
+                        "warning": "#f59e0b",
+                        "secondary-fixed": "#d8e2ff",
+                        "badge-orange": "#fb923c",
+                        "tertiary-fixed-dim": "#cac6c3",
+                        "body": "#374151",
+                        "badge-emerald": "#34d399",
+                        "background": "#fdf8f8",
+                        "on-primary-fixed-variant": "#474646",
+                        "on-dark-soft": "#a1a1aa",
+                        "inverse-primary": "#c8c6c5",
+                        "primary-fixed": "#e5e2e1",
+                        "on-surface-variant": "#444748",
+                        "secondary-container": "#2170e4",
+                        "surface-variant": "#e5e2e1",
+                        "on-secondary-container": "#fefcff",
+                        "outline-variant": "#c4c7c7",
+                        "outline": "#747878",
+                        "tertiary-fixed": "#e6e1df",
+                        "tertiary": "#000000",
+                        "surface-bright": "#fdf8f8",
+                        "surface-tint": "#5f5e5e",
+                        "on-tertiary-fixed": "#1d1b1a",
+                        "surface-dim": "#ddd9d8",
+                        "primary-fixed-dim": "#c8c6c5",
+                        "on-tertiary-container": "#868381",
+                        "surface-container-low": "#f7f3f2",
+                        "surface-container-highest": "#e5e2e1",
+                        "error": "#ef4444",
+                        "secondary-fixed-dim": "#adc6ff",
+                        "surface-strong": "#e5e7eb",
+                        "surface-card": "#f5f5f5",
+                        "success": "#10b981",
+                        "primary-container": "#1c1b1b",
+                        "surface-container-high": "#ebe7e6",
+                        "inverse-surface": "#313030",
+                        "on-primary-container": "#858383",
+                        "surface-dark-elevated": "#1a1a1a",
+                        "inverse-on-surface": "#f4f0ef",
+                        "on-error-container": "#93000a",
+                        "badge-violet": "#8b5cf6",
+                        "on-secondary-fixed-variant": "#004395",
+                        "secondary": "#0058be",
+                        "on-secondary-fixed": "#001a42",
+                        "surface-container": "#f1edec",
+                        "surface": "#fdf8f8"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "xxl": "48px",
+                        "xs": "8px",
+                        "section": "96px",
+                        "xxs": "4px",
+                        "sm": "12px",
+                        "xl": "32px",
+                        "lg": "24px",
+                        "md": "16px"
+                    },
+                    "fontFamily": {
+                        "code": ["jetbrainsMono"],
+                        "display-xl-mobile": ["manrope"],
+                        "body-sm": ["inter"],
+                        "display-sm": ["manrope"],
+                        "display-md": ["manrope"],
+                        "display-lg": ["manrope"],
+                        "display-xl": ["manrope"],
+                        "button": ["inter"],
+                        "title-lg": ["inter"],
+                        "caption": ["inter"],
+                        "body-md": ["inter"],
+                        "title-md": ["inter"]
+                    },
+                    "fontSize": {
+                        "code": ["14px", { "lineHeight": "1.5", "letterSpacing": "0", "fontWeight": "400" }],
+                        "display-xl-mobile": ["32px", { "lineHeight": "1.1", "letterSpacing": "-1px", "fontWeight": "700" }],
+                        "body-sm": ["14px", { "lineHeight": "1.5", "letterSpacing": "0", "fontWeight": "400" }],
+                        "display-sm": ["28px", { "lineHeight": "1.2", "letterSpacing": "-0.5px", "fontWeight": "700" }],
+                        "display-md": ["36px", { "lineHeight": "1.15", "letterSpacing": "-1px", "fontWeight": "700" }],
+                        "display-lg": ["48px", { "lineHeight": "1.1", "letterSpacing": "-1.5px", "fontWeight": "700" }],
+                        "display-xl": ["64px", { "lineHeight": "1.05", "letterSpacing": "-2px", "fontWeight": "700" }],
+                        "button": ["14px", { "lineHeight": "1.0", "letterSpacing": "0", "fontWeight": "600" }],
+                        "title-lg": ["22px", { "lineHeight": "1.3", "letterSpacing": "-0.3px", "fontWeight": "600" }],
+                        "caption": ["13px", { "lineHeight": "1.4", "letterSpacing": "0", "fontWeight": "500" }],
+                        "body-md": ["16px", { "lineHeight": "1.5", "letterSpacing": "0", "fontWeight": "400" }],
+                        "title-md": ["18px", { "lineHeight": "1.4", "letterSpacing": "0", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-surface-dark text-on-dark font-body-md antialiased min-h-screen flex flex-col items-center justify-center p-lg md:p-xxl">
+<!-- Main Container -->
+<main class="w-full max-w-[800px] flex flex-col gap-xl">
+<!-- Header Section -->
+<header class="flex flex-col items-center text-center gap-sm">
+<div class="w-16 h-16 bg-surface-dark-elevated rounded-xl border border-outline-variant flex items-center justify-center mb-sm">
+<span class="material-symbols-outlined text-display-sm" style="font-variation-settings: 'FILL' 1;">task_alt</span>
+</div>
+<h1 class="font-display-md text-display-md text-on-dark tracking-tight">Google Tasks Pro</h1>
+<p class="font-body-md text-body-md text-on-dark-soft">About &amp; Support</p>
+</header>
+<!-- Version & Stack Bento -->
+<section class="grid grid-cols-1 md:grid-cols-2 gap-lg">
+<!-- Version Card -->
+<div class="bg-surface-dark-elevated border border-outline-variant rounded-xl p-lg flex flex-col gap-md">
+<div class="flex items-center gap-sm text-on-dark-soft">
+<span class="material-symbols-outlined font-title-lg text-title-lg">info</span>
+<h2 class="font-title-md text-title-md">App Version</h2>
+</div>
+<div class="flex items-end gap-sm mt-auto pt-xl">
+<span class="font-display-sm text-display-sm text-on-dark">v1.0.4</span>
+<span class="font-body-sm text-body-sm text-on-dark-soft mb-1">Stable Channel</span>
+</div>
+<button class="w-full py-sm px-md bg-canvas text-ink font-button text-button rounded-lg mt-sm hover:bg-surface-soft transition-colors border border-hairline">
+                    Check for Updates
+                </button>
+</div>
+<!-- Tech Stack Card -->
+<div class="bg-surface-dark-elevated border border-outline-variant rounded-xl p-lg flex flex-col gap-md">
+<div class="flex items-center gap-sm text-on-dark-soft mb-sm">
+<span class="material-symbols-outlined font-title-lg text-title-lg">code</span>
+<h2 class="font-title-md text-title-md">Technical Stack</h2>
+</div>
+<ul class="flex flex-col gap-sm flex-grow">
+<li class="flex items-center justify-between py-xs border-b border-outline-variant/30">
+<span class="font-body-md text-body-md text-on-dark">Framework</span>
+<span class="font-code text-code text-on-dark-soft">Tauri</span>
+</li>
+<li class="flex items-center justify-between py-xs border-b border-outline-variant/30">
+<span class="font-body-md text-body-md text-on-dark">Frontend</span>
+<span class="font-code text-code text-on-dark-soft">React</span>
+</li>
+<li class="flex items-center justify-between py-xs border-b border-outline-variant/30">
+<span class="font-body-md text-body-md text-on-dark">Language</span>
+<span class="font-code text-code text-on-dark-soft">TypeScript</span>
+</li>
+</ul>
+</div>
+</section>
+<!-- Resources & Support Links -->
+<section class="bg-surface-dark-elevated border border-outline-variant rounded-xl overflow-hidden">
+<div class="p-lg border-b border-outline-variant">
+<h2 class="font-title-md text-title-md text-on-dark">Resources &amp; Help</h2>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-outline-variant">
+<!-- Documentation Link -->
+<a class="flex items-start gap-md p-lg hover:bg-surface-container-highest transition-colors group" href="#">
+<span class="material-symbols-outlined text-title-lg text-on-dark-soft group-hover:text-on-dark transition-colors mt-1">menu_book</span>
+<div class="flex flex-col gap-xs">
+<span class="font-title-md text-title-md text-on-dark">Documentation</span>
+<span class="font-body-sm text-body-sm text-on-dark-soft">Read guides and API references.</span>
+</div>
+<span class="material-symbols-outlined text-title-lg text-on-dark-soft ml-auto mt-1 opacity-0 group-hover:opacity-100 transition-opacity">arrow_forward</span>
+</a>
+<!-- Keyboard Shortcuts Link -->
+<a class="flex items-start gap-md p-lg hover:bg-surface-container-highest transition-colors group" href="#">
+<span class="material-symbols-outlined text-title-lg text-on-dark-soft group-hover:text-on-dark transition-colors mt-1">keyboard</span>
+<div class="flex flex-col gap-xs">
+<span class="font-title-md text-title-md text-on-dark">Keyboard Shortcuts</span>
+<span class="font-body-sm text-body-sm text-on-dark-soft">Master the app with hotkeys.</span>
+</div>
+<span class="material-symbols-outlined text-title-lg text-on-dark-soft ml-auto mt-1 opacity-0 group-hover:opacity-100 transition-opacity">arrow_forward</span>
+</a>
+</div>
+</section>
+<!-- Action Section -->
+<section class="flex flex-col items-center text-center gap-md pt-lg pb-xxl">
+<p class="font-body-md text-body-md text-on-dark-soft max-w-md">
+                Experiencing unexpected behavior or have a feature request? Let our engineering team know.
+            </p>
+<button class="bg-primary text-on-primary font-button text-button px-lg py-sm rounded-lg border border-outline-variant hover:bg-surface-dark-elevated transition-colors flex items-center gap-sm">
+<span class="material-symbols-outlined text-body-md">bug_report</span>
+                Report an Issue
+            </button>
+</section>
+</main>
+</body></html>

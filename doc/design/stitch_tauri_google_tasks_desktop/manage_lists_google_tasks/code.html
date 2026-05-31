@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>List Management</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400&amp;family=Manrope:wght@700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "muted-soft": "#898989",
+                      "on-primary": "#ffffff",
+                      "primary": "#000000",
+                      "on-tertiary": "#ffffff",
+                      "error-container": "#ffdad6",
+                      "badge-pink": "#ec4899",
+                      "tertiary-container": "#1d1b1a",
+                      "on-secondary": "#ffffff",
+                      "canvas": "#ffffff",
+                      "on-surface": "#1c1b1b",
+                      "on-background": "#1c1b1b",
+                      "on-tertiary-fixed-variant": "#484645",
+                      "on-primary-fixed": "#1c1b1b",
+                      "muted": "#6b7280",
+                      "surface-soft": "#f8f9fa",
+                      "surface-container-lowest": "#ffffff",
+                      "surface-dark": "#101010",
+                      "on-dark": "#ffffff",
+                      "ink": "#111111",
+                      "hairline-soft": "#f3f4f6",
+                      "on-error": "#ffffff",
+                      "hairline": "#e5e7eb",
+                      "warning": "#f59e0b",
+                      "secondary-fixed": "#d8e2ff",
+                      "badge-orange": "#fb923c",
+                      "tertiary-fixed-dim": "#cac6c3",
+                      "body": "#374151",
+                      "badge-emerald": "#34d399",
+                      "background": "#fdf8f8",
+                      "on-primary-fixed-variant": "#474646",
+                      "on-dark-soft": "#a1a1aa",
+                      "inverse-primary": "#c8c6c5",
+                      "primary-fixed": "#e5e2e1",
+                      "on-surface-variant": "#444748",
+                      "secondary-container": "#2170e4",
+                      "surface-variant": "#e5e2e1",
+                      "on-secondary-container": "#fefcff",
+                      "outline-variant": "#c4c7c7",
+                      "outline": "#747878",
+                      "tertiary-fixed": "#e6e1df",
+                      "tertiary": "#000000",
+                      "surface-bright": "#fdf8f8",
+                      "surface-tint": "#5f5e5e",
+                      "on-tertiary-fixed": "#1d1b1a",
+                      "surface-dim": "#ddd9d8",
+                      "primary-fixed-dim": "#c8c6c5",
+                      "on-tertiary-container": "#868381",
+                      "surface-container-low": "#f7f3f2",
+                      "surface-container-highest": "#e5e2e1",
+                      "error": "#ef4444",
+                      "secondary-fixed-dim": "#adc6ff",
+                      "surface-strong": "#e5e7eb",
+                      "surface-card": "#f5f5f5",
+                      "success": "#10b981",
+                      "primary-container": "#1c1b1b",
+                      "surface-container-high": "#ebe7e6",
+                      "inverse-surface": "#313030",
+                      "on-primary-container": "#858383",
+                      "surface-dark-elevated": "#1a1a1a",
+                      "inverse-on-surface": "#f4f0ef",
+                      "on-error-container": "#93000a",
+                      "badge-violet": "#8b5cf6",
+                      "on-secondary-fixed-variant": "#004395",
+                      "secondary": "#0058be",
+                      "on-secondary-fixed": "#001a42",
+                      "surface-container": "#f1edec",
+                      "surface": "#fdf8f8"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "xxl": "48px",
+                      "xs": "8px",
+                      "section": "96px",
+                      "xxs": "4px",
+                      "sm": "12px",
+                      "xl": "32px",
+                      "lg": "24px",
+                      "md": "16px"
+              },
+              "fontFamily": {
+                      "code": [
+                              "jetbrainsMono"
+                      ],
+                      "display-xl-mobile": [
+                              "manrope"
+                      ],
+                      "body-sm": [
+                              "inter"
+                      ],
+                      "display-sm": [
+                              "manrope"
+                      ],
+                      "display-md": [
+                              "manrope"
+                      ],
+                      "display-lg": [
+                              "manrope"
+                      ],
+                      "display-xl": [
+                              "manrope"
+                      ],
+                      "button": [
+                              "inter"
+                      ],
+                      "title-lg": [
+                              "inter"
+                      ],
+                      "caption": [
+                              "inter"
+                      ],
+                      "body-md": [
+                              "inter"
+                      ],
+                      "title-md": [
+                              "inter"
+                      ]
+              },
+              "fontSize": {
+                      "code": [
+                              "14px",
+                              {
+                                      "lineHeight": "1.5",
+                                      "letterSpacing": "0",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "display-xl-mobile": [
+                              "32px",
+                              {
+                                      "lineHeight": "1.1",
+                                      "letterSpacing": "-1px",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "body-sm": [
+                              "14px",
+                              {
+                                      "lineHeight": "1.5",
+                                      "letterSpacing": "0",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "display-sm": [
+                              "28px",
+                              {
+                                      "lineHeight": "1.2",
+                                      "letterSpacing": "-0.5px",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "display-md": [
+                              "36px",
+                              {
+                                      "lineHeight": "1.15",
+                                      "letterSpacing": "-1px",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "display-lg": [
+                              "48px",
+                              {
+                                      "lineHeight": "1.1",
+                                      "letterSpacing": "-1.5px",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "display-xl": [
+                              "64px",
+                              {
+                                      "lineHeight": "1.05",
+                                      "letterSpacing": "-2px",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "button": [
+                              "14px",
+                              {
+                                      "lineHeight": "1.0",
+                                      "letterSpacing": "0",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "title-lg": [
+                              "22px",
+                              {
+                                      "lineHeight": "1.3",
+                                      "letterSpacing": "-0.3px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "caption": [
+                              "13px",
+                              {
+                                      "lineHeight": "1.4",
+                                      "letterSpacing": "0",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "body-md": [
+                              "16px",
+                              {
+                                      "lineHeight": "1.5",
+                                      "letterSpacing": "0",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "title-md": [
+                              "18px",
+                              {
+                                      "lineHeight": "1.4",
+                                      "letterSpacing": "0",
+                                      "fontWeight": "600"
+                              }
+                      ]
+              }
+      },
+          },
+        }
+      </script>
+</head>
+<body class="bg-canvas text-body font-body-md min-h-screen flex selection:bg-primary-container selection:text-on-primary-container">
+<!-- SideNavBar Component -->
+<aside class="hidden md:flex flex-col h-full p-md space-y-lg bg-surface-container-low dark:bg-surface-dark-elevated text-primary dark:text-on-dark font-title-md text-title-md docked left-0 h-screen w-72 border-r border-hairline dark:border-outline-variant flat no shadows">
+<!-- Header -->
+<div class="px-md py-sm">
+<span class="font-display-sm text-display-sm font-bold text-primary dark:text-on-dark">Alex Miller</span>
+<span class="block font-body-sm text-body-sm text-muted mt-xs">Product Engineer</span>
+</div>
+<!-- CTA -->
+<div class="px-md">
+<button class="w-full bg-primary text-on-primary font-button text-button py-sm rounded-lg hover:bg-tertiary-container transition-colors">New List</button>
+</div>
+<!-- Navigation Tabs -->
+<nav class="flex-1 space-y-xs">
+<a class="flex items-center gap-md text-body dark:text-on-dark-soft px-md py-sm hover:bg-surface-container-high dark:hover:bg-surface-container-highest transition-colors active:scale-[0.98] transition-transform duration-100 rounded-lg" href="#">
+<span class="material-symbols-outlined">search</span>
+<span>Search</span>
+</a>
+<!-- Active Tab: My Tasks -->
+<a class="flex items-center gap-md bg-primary dark:bg-on-dark text-on-primary dark:text-primary rounded-lg px-md py-sm hover:bg-surface-container-high dark:hover:bg-surface-container-highest transition-colors active:scale-[0.98] transition-transform duration-100" href="#">
+<span class="material-symbols-outlined">task_alt</span>
+<span>My Tasks</span>
+</a>
+<a class="flex items-center gap-md text-body dark:text-on-dark-soft px-md py-sm hover:bg-surface-container-high dark:hover:bg-surface-container-highest transition-colors active:scale-[0.98] transition-transform duration-100 rounded-lg" href="#">
+<span class="material-symbols-outlined">folder</span>
+<span>Project Alpha</span>
+</a>
+<a class="flex items-center gap-md text-body dark:text-on-dark-soft px-md py-sm hover:bg-surface-container-high dark:hover:bg-surface-container-highest transition-colors active:scale-[0.98] transition-transform duration-100 rounded-lg" href="#">
+<span class="material-symbols-outlined">work_outline</span>
+<span>Work</span>
+</a>
+<a class="flex items-center gap-md text-body dark:text-on-dark-soft px-md py-sm hover:bg-surface-container-high dark:hover:bg-surface-container-highest transition-colors active:scale-[0.98] transition-transform duration-100 rounded-lg" href="#">
+<span class="material-symbols-outlined">home</span>
+<span>Personal</span>
+</a>
+</nav>
+<!-- Footer Tabs -->
+<div class="space-y-xs pt-md border-t border-hairline dark:border-outline-variant">
+<a class="flex items-center gap-md text-body dark:text-on-dark-soft px-md py-sm hover:bg-surface-container-high dark:hover:bg-surface-container-highest transition-colors active:scale-[0.98] transition-transform duration-100 rounded-lg" href="#">
+<span class="material-symbols-outlined">archive</span>
+<span>Archive</span>
+</a>
+<a class="flex items-center gap-md text-body dark:text-on-dark-soft px-md py-sm hover:bg-surface-container-high dark:hover:bg-surface-container-highest transition-colors active:scale-[0.98] transition-transform duration-100 rounded-lg" href="#">
+<span class="material-symbols-outlined">delete</span>
+<span>Trash</span>
+</a>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-1 flex flex-col h-screen overflow-hidden bg-surface-soft">
+<!-- TopNavBar Component -->
+<header class="bg-canvas dark:bg-surface-dark text-primary dark:text-on-dark font-body-md text-body-md docked full-width top-0 border-b border-hairline dark:border-outline-variant flat no shadows transition-all duration-200 ease-in-out flex justify-between items-center px-lg h-16 w-full shrink-0">
+<div class="flex items-center gap-xl h-full">
+<span class="text-title-lg font-display-sm font-bold text-primary dark:text-on-dark">Google Tasks Pro</span>
+<nav class="hidden md:flex gap-lg h-full items-end">
+<!-- Active Link: List -->
+<a class="text-primary dark:text-on-dark border-b-2 border-primary dark:border-on-dark pb-3 mt-1 hover:text-ink dark:hover:text-on-dark transition-colors" href="#">List</a>
+<a class="text-muted dark:text-on-dark-soft pb-3 mt-1 hover:text-ink dark:hover:text-on-dark transition-colors" href="#">Board</a>
+<a class="text-muted dark:text-on-dark-soft pb-3 mt-1 hover:text-ink dark:hover:text-on-dark transition-colors" href="#">Calendar</a>
+</nav>
+</div>
+<div class="flex gap-sm items-center">
+<button class="p-xs text-muted hover:text-ink transition-colors hover:bg-surface-container-low rounded-full"><span class="material-symbols-outlined">settings</span></button>
+<button class="p-xs text-muted hover:text-ink transition-colors hover:bg-surface-container-low rounded-full"><span class="material-symbols-outlined">help</span></button>
+<button class="p-xs text-muted hover:text-ink transition-colors hover:bg-surface-container-low rounded-full"><span class="material-symbols-outlined">more_vert</span></button>
+</div>
+</header>
+<!-- Scrollable Content Canvas -->
+<div class="flex-1 overflow-y-auto p-xxl">
+<div class="max-w-[1000px] mx-auto w-full">
+<!-- Section Header -->
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-lg mb-xl">
+<div>
+<h1 class="font-display-md text-display-md text-ink mb-xs">Manage Lists</h1>
+<p class="font-body-md text-body-md text-muted">Organize your workspaces, assign colors, and prioritize your active task lists.</p>
+</div>
+<button class="bg-primary text-on-dark font-button text-button px-lg py-sm rounded-lg hover:bg-tertiary-container transition-colors shadow-[0_1px_2px_rgba(0,0,0,0.05)] whitespace-nowrap">
+                        Create New List
+                    </button>
+</div>
+<!-- List Management Table/Grid -->
+<div class="bg-canvas border border-hairline rounded-xl shadow-[0_1px_2px_rgba(0,0,0,0.05)] overflow-hidden">
+<!-- Table Header -->
+<div class="grid grid-cols-[48px_1fr_140px_100px_100px] gap-md px-lg py-sm bg-surface-container-low border-b border-hairline items-center">
+<div></div> <!-- Space for drag handle -->
+<div class="font-title-sm text-caption text-muted tracking-wider uppercase">Workspace Name</div>
+<div class="font-title-sm text-caption text-muted tracking-wider uppercase">Theme Color</div>
+<div class="font-title-sm text-caption text-muted tracking-wider uppercase text-right">Tasks</div>
+<div class="font-title-sm text-caption text-muted tracking-wider uppercase text-right">Actions</div>
+</div>
+<!-- Table Body -->
+<div class="divide-y divide-hairline">
+<!-- List Item 1 -->
+<div class="group grid grid-cols-[48px_1fr_140px_100px_100px] gap-md px-lg py-md items-center hover:bg-surface-soft transition-colors bg-canvas">
+<div class="flex justify-center text-outline-variant cursor-grab hover:text-ink active:cursor-grabbing">
+<span class="material-symbols-outlined">drag_indicator</span>
+</div>
+<div class="font-title-md text-title-md text-ink truncate">
+                                Project Alpha Launch
+                            </div>
+<div>
+<button class="flex items-center gap-xs px-xs py-xxs -ml-xs rounded hover:bg-surface-container-low transition-colors group/color">
+<div class="w-4 h-4 rounded-full bg-badge-violet border border-black/10"></div>
+<span class="font-body-sm text-body-sm text-muted group-hover/color:text-ink transition-colors">Violet</span>
+<span class="material-symbols-outlined text-[16px] text-outline-variant opacity-0 group-hover/color:opacity-100 transition-opacity">arrow_drop_down</span>
+</button>
+</div>
+<div class="text-right">
+<span class="inline-flex items-center justify-center bg-surface-container-low text-muted font-caption text-caption px-sm py-xxs rounded-full border border-hairline">
+                                    24
+                                </span>
+</div>
+<div class="flex justify-end gap-xs opacity-0 group-hover:opacity-100 transition-opacity">
+<button class="p-xs text-muted hover:text-ink hover:bg-surface-container-low rounded-md transition-colors" title="Rename list">
+<span class="material-symbols-outlined text-[20px]">edit</span>
+</button>
+<button class="p-xs text-muted hover:text-error hover:bg-error-container rounded-md transition-colors" title="Delete list">
+<span class="material-symbols-outlined text-[20px]">delete</span>
+</button>
+</div>
+</div>
+<!-- List Item 2 -->
+<div class="group grid grid-cols-[48px_1fr_140px_100px_100px] gap-md px-lg py-md items-center hover:bg-surface-soft transition-colors bg-canvas">
+<div class="flex justify-center text-outline-variant cursor-grab hover:text-ink active:cursor-grabbing">
+<span class="material-symbols-outlined">drag_indicator</span>
+</div>
+<div class="font-title-md text-title-md text-ink truncate">
+                                Weekly Sprints
+                            </div>
+<div>
+<button class="flex items-center gap-xs px-xs py-xxs -ml-xs rounded hover:bg-surface-container-low transition-colors group/color">
+<div class="w-4 h-4 rounded-full bg-badge-orange border border-black/10"></div>
+<span class="font-body-sm text-body-sm text-muted group-hover/color:text-ink transition-colors">Orange</span>
+<span class="material-symbols-outlined text-[16px] text-outline-variant opacity-0 group-hover/color:opacity-100 transition-opacity">arrow_drop_down</span>
+</button>
+</div>
+<div class="text-right">
+<span class="inline-flex items-center justify-center bg-surface-container-low text-muted font-caption text-caption px-sm py-xxs rounded-full border border-hairline">
+                                    12
+                                </span>
+</div>
+<div class="flex justify-end gap-xs opacity-0 group-hover:opacity-100 transition-opacity">
+<button class="p-xs text-muted hover:text-ink hover:bg-surface-container-low rounded-md transition-colors" title="Rename list">
+<span class="material-symbols-outlined text-[20px]">edit</span>
+</button>
+<button class="p-xs text-muted hover:text-error hover:bg-error-container rounded-md transition-colors" title="Delete list">
+<span class="material-symbols-outlined text-[20px]">delete</span>
+</button>
+</div>
+</div>
+<!-- List Item 3 -->
+<div class="group grid grid-cols-[48px_1fr_140px_100px_100px] gap-md px-lg py-md items-center hover:bg-surface-soft transition-colors bg-canvas">
+<div class="flex justify-center text-outline-variant cursor-grab hover:text-ink active:cursor-grabbing">
+<span class="material-symbols-outlined">drag_indicator</span>
+</div>
+<div class="font-title-md text-title-md text-ink truncate">
+                                Personal Errands
+                            </div>
+<div>
+<button class="flex items-center gap-xs px-xs py-xxs -ml-xs rounded hover:bg-surface-container-low transition-colors group/color">
+<div class="w-4 h-4 rounded-full bg-badge-emerald border border-black/10"></div>
+<span class="font-body-sm text-body-sm text-muted group-hover/color:text-ink transition-colors">Emerald</span>
+<span class="material-symbols-outlined text-[16px] text-outline-variant opacity-0 group-hover/color:opacity-100 transition-opacity">arrow_drop_down</span>
+</button>
+</div>
+<div class="text-right">
+<span class="inline-flex items-center justify-center bg-surface-container-low text-muted font-caption text-caption px-sm py-xxs rounded-full border border-hairline">
+                                    5
+                                </span>
+</div>
+<div class="flex justify-end gap-xs opacity-0 group-hover:opacity-100 transition-opacity">
+<button class="p-xs text-muted hover:text-ink hover:bg-surface-container-low rounded-md transition-colors" title="Rename list">
+<span class="material-symbols-outlined text-[20px]">edit</span>
+</button>
+<button class="p-xs text-muted hover:text-error hover:bg-error-container rounded-md transition-colors" title="Delete list">
+<span class="material-symbols-outlined text-[20px]">delete</span>
+</button>
+</div>
+</div>
+<!-- List Item 4 -->
+<div class="group grid grid-cols-[48px_1fr_140px_100px_100px] gap-md px-lg py-md items-center hover:bg-surface-soft transition-colors bg-canvas">
+<div class="flex justify-center text-outline-variant cursor-grab hover:text-ink active:cursor-grabbing">
+<span class="material-symbols-outlined">drag_indicator</span>
+</div>
+<div class="font-title-md text-title-md text-ink truncate">
+                                Design System V2
+                            </div>
+<div>
+<button class="flex items-center gap-xs px-xs py-xxs -ml-xs rounded hover:bg-surface-container-low transition-colors group/color">
+<div class="w-4 h-4 rounded-full bg-badge-pink border border-black/10"></div>
+<span class="font-body-sm text-body-sm text-muted group-hover/color:text-ink transition-colors">Pink</span>
+<span class="material-symbols-outlined text-[16px] text-outline-variant opacity-0 group-hover/color:opacity-100 transition-opacity">arrow_drop_down</span>
+</button>
+</div>
+<div class="text-right">
+<span class="inline-flex items-center justify-center bg-surface-container-low text-muted font-caption text-caption px-sm py-xxs rounded-full border border-hairline">
+                                    89
+                                </span>
+</div>
+<div class="flex justify-end gap-xs opacity-0 group-hover:opacity-100 transition-opacity">
+<button class="p-xs text-muted hover:text-ink hover:bg-surface-container-low rounded-md transition-colors" title="Rename list">
+<span class="material-symbols-outlined text-[20px]">edit</span>
+</button>
+<button class="p-xs text-muted hover:text-error hover:bg-error-container rounded-md transition-colors" title="Delete list">
+<span class="material-symbols-outlined text-[20px]">delete</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Empty State Context (Hidden for this view, but good for structure) -->
+<div class="hidden flex-col items-center justify-center py-xxl text-center">
+<div class="w-16 h-16 bg-surface-container-low rounded-full flex items-center justify-center mb-md text-outline-variant">
+<span class="material-symbols-outlined text-[32px]">list_alt</span>
+</div>
+<h3 class="font-title-lg text-title-lg text-ink mb-xs">No lists found</h3>
+<p class="font-body-md text-body-md text-muted max-w-sm mb-lg">You haven't created any custom lists yet. Start organizing your work by creating your first list.</p>
+<button class="bg-canvas border border-hairline text-ink font-button text-button px-lg py-sm rounded-lg hover:bg-surface-soft transition-colors shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
+                        Create New List
+                    </button>
+</div>
+</div>
+</div>
+</main>
+</body></html>
