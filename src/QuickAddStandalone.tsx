@@ -293,7 +293,7 @@ function parseQuickAddDirectives(text: string, now = new Date()): QuickDirective
   const consume = (pattern: RegExp, apply: (...captures: string[]) => void) => {
     working = working.replace(pattern, (...args) => {
       const captures = args.slice(1, -2) as string[];
-      apply(...captures);
+      apply(...captures, args[0] as string);
       changed = true;
       return " ";
     });
@@ -337,21 +337,9 @@ function parseQuickAddDirectives(text: string, now = new Date()): QuickDirective
     dueDate = resolveWeekdayDate(now, chineseWeekdayToNumber(weekday), "plain");
   });
 
-  consume(/(早上|中午|下午|晚上)/g, (period) => {
-    const defaults: Record<string, string> = {
-      早上: "09:00",
-      中午: "12:00",
-      下午: "15:00",
-      晚上: "18:00",
-    };
-    reminderTime = defaults[period];
-    dueDate = dueDate ?? formatDate(now);
-  });
-
   consume(
     /(?:(明天|后天|今天|明早|今晚|早上|中午|下午|晚上)\s*)?([0-2]?\d)(?:[:：](\d{1,2})|点半|点)/g,
-    (period, hours, minutes) => {
-      const source = arguments[0] as string;
+    (period, hours, minutes, source) => {
       if (period === "明天") {
         dueDate = formatDate(addDays(now, 1));
       } else if (period === "后天") {
@@ -369,6 +357,17 @@ function parseQuickAddDirectives(text: string, now = new Date()): QuickDirective
         reminderTime;
     },
   );
+
+  consume(/(早上|中午|下午|晚上)/g, (period) => {
+    const defaults: Record<string, string> = {
+      早上: "09:00",
+      中午: "12:00",
+      下午: "15:00",
+      晚上: "18:00",
+    };
+    reminderTime = defaults[period];
+    dueDate = dueDate ?? formatDate(now);
+  });
 
   return {
     title: changed ? normalizeWhitespace(working) : text,

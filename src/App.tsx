@@ -143,12 +143,18 @@ function loadListColorMap(fallbackLists: TaskListSummary[]): Record<string, numb
       return fallback;
     }
     const parsed = JSON.parse(stored) as Record<string, unknown>;
-    return Object.fromEntries(
-      fallbackLists.map((list, index) => [
-        list.id,
-        typeof parsed[list.id] === "number" ? parsed[list.id] : index,
-      ]),
-    ) as Record<string, number>;
+    const storedColors = Object.fromEntries(
+      Object.entries(parsed).filter((entry): entry is [string, number] => typeof entry[1] === "number"),
+    );
+    return {
+      ...storedColors,
+      ...Object.fromEntries(
+        fallbackLists.map((list, index) => [
+          list.id,
+          typeof storedColors[list.id] === "number" ? storedColors[list.id] : index,
+        ]),
+      ),
+    };
   } catch {
     return fallback;
   }
