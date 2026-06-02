@@ -792,7 +792,12 @@ fn client_id() -> Result<String, String> {
         return Ok(client_id);
     }
 
-    Ok(DEFAULT_CLIENT_ID.to_string())
+    client_id_entry()?
+        .get_password()
+        .map(|value| value.trim().to_string())
+        .ok()
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "请先配置 Google OAuth Client ID".to_string())
 }
 
 fn client_secret() -> Result<String, String> {
@@ -804,7 +809,12 @@ fn client_secret() -> Result<String, String> {
         return Ok(client_secret);
     }
 
-    Ok(DEFAULT_CLIENT_SECRET.to_string())
+    client_secret_entry()?
+        .get_password()
+        .map(|value| value.trim().to_string())
+        .ok()
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "请先配置 Google OAuth Client Secret".to_string())
 }
 
 fn refresh_token_entry() -> Result<Entry, String> {
