@@ -146,7 +146,12 @@ pub fn sync_delete_task(
     task_id: String,
 ) -> Result<(), String> {
     let conn = open_app_database(&app)?;
-    match google_tasks::google_delete_task(app.clone(), state, task_list_id.clone(), task_id.clone()) {
+    match google_tasks::google_delete_task(
+        app.clone(),
+        state,
+        task_list_id.clone(),
+        task_id.clone(),
+    ) {
         Ok(()) => delete_cached_task(&conn, &task_id),
         Err(error) if classify_google_error(&error) == "offline" => {
             delete_cached_task(&conn, &task_id)?;
@@ -199,9 +204,15 @@ pub fn sync_move_task(
     }
 }
 
-fn run_full_sync(app: &AppHandle, conn: &Connection, state: &State<GoogleTasksState>) -> Result<(), String> {
+fn run_full_sync(
+    app: &AppHandle,
+    conn: &Connection,
+    state: &State<GoogleTasksState>,
+) -> Result<(), String> {
     flush_pending_queue(app, conn, state)?;
-    let lists = retry_auth_once(state, || google_tasks::google_task_lists(app.clone(), state.clone()))?;
+    let lists = retry_auth_once(state, || {
+        google_tasks::google_task_lists(app.clone(), state.clone())
+    })?;
 
     replace_task_lists(conn, &lists)?;
     replace_tasks_begin(conn)?;
@@ -218,7 +229,11 @@ fn run_full_sync(app: &AppHandle, conn: &Connection, state: &State<GoogleTasksSt
     Ok(())
 }
 
-fn flush_pending_queue(app: &AppHandle, conn: &Connection, state: &State<GoogleTasksState>) -> Result<(), String> {
+fn flush_pending_queue(
+    app: &AppHandle,
+    conn: &Connection,
+    state: &State<GoogleTasksState>,
+) -> Result<(), String> {
     let pending = pending_items(conn)?;
     let mut id_map: HashMap<String, String> = HashMap::new();
 

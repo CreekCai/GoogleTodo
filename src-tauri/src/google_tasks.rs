@@ -1,7 +1,6 @@
 use std::{
     collections::HashMap,
-    env,
-    fs,
+    env, fs,
     io::{Read, Write},
     net::TcpListener,
     path::PathBuf,
@@ -384,12 +383,16 @@ pub fn google_oauth_login(
     let access_token = token.access_token;
     let profile = match fetch_user_profile(&client, &access_token) {
         Ok(user_info_profile) => Some(StoredUserProfile {
-            name: user_info_profile
-                .name
-                .or_else(|| id_token_profile.as_ref().and_then(|profile| profile.name.clone())),
-            email: user_info_profile
-                .email
-                .or_else(|| id_token_profile.as_ref().and_then(|profile| profile.email.clone())),
+            name: user_info_profile.name.or_else(|| {
+                id_token_profile
+                    .as_ref()
+                    .and_then(|profile| profile.name.clone())
+            }),
+            email: user_info_profile.email.or_else(|| {
+                id_token_profile
+                    .as_ref()
+                    .and_then(|profile| profile.email.clone())
+            }),
         }),
         Err(_) => id_token_profile,
     };
@@ -411,7 +414,10 @@ pub fn google_oauth_login(
 }
 
 #[tauri::command]
-pub fn google_sign_out(app: AppHandle, state: State<GoogleTasksState>) -> Result<AuthStatus, String> {
+pub fn google_sign_out(
+    app: AppHandle,
+    state: State<GoogleTasksState>,
+) -> Result<AuthStatus, String> {
     match refresh_token_entry()?.delete_credential() {
         Ok(()) | Err(keyring::Error::NoEntry) => {}
         Err(error) => return Err(to_message(error)),
@@ -987,7 +993,10 @@ fn refresh_access_token(
     )
 }
 
-fn fetch_calendar_list(client: &Client, token: &str) -> Result<Vec<GoogleCalendarListItem>, String> {
+fn fetch_calendar_list(
+    client: &Client,
+    token: &str,
+) -> Result<Vec<GoogleCalendarListItem>, String> {
     let mut page_token: Option<String> = None;
     let mut calendars = Vec::new();
 
@@ -995,14 +1004,17 @@ fn fetch_calendar_list(client: &Client, token: &str) -> Result<Vec<GoogleCalenda
         let mut request = client
             .get(format!("{CALENDAR_API_BASE}/users/me/calendarList"))
             .bearer_auth(token)
-            .query(&[("showHidden", "false"), ("minAccessRole", "reader"), ("maxResults", "100")]);
+            .query(&[
+                ("showHidden", "false"),
+                ("minAccessRole", "reader"),
+                ("maxResults", "100"),
+            ]);
 
         if let Some(next_page_token) = page_token.as_deref() {
             request = request.query(&[("pageToken", next_page_token)]);
         }
 
-        let response: CalendarListResponse =
-            send_json(request, "获取 Google Calendar 列表失败")?;
+        let response: CalendarListResponse = send_json(request, "获取 Google Calendar 列表失败")?;
         calendars.extend(response.items.unwrap_or_default());
         page_token = response.next_page_token;
         if page_token.is_none() {
@@ -1239,7 +1251,9 @@ fn map_calendar_event(
         id: event.id,
         calendar_id: calendar_id.to_string(),
         calendar_name: calendar_name.to_string(),
-        title: event.summary.unwrap_or_else(|| "Untitled event".to_string()),
+        title: event
+            .summary
+            .unwrap_or_else(|| "Untitled event".to_string()),
         description: event.description,
         location: event.location,
         start: start_value,
@@ -1276,7 +1290,9 @@ fn apply_calendar_event_time(
                 .and_then(|value| value.get(0..10))
         })
         .unwrap_or("1970-01-01");
-    let next_date = date.filter(|value| !value.trim().is_empty()).unwrap_or(current_date);
+    let next_date = date
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or(current_date);
 
     if !is_iso_date(next_date) {
         return Err("日程日期格式不正确，应为 YYYY-MM-DD".to_string());
@@ -1330,7 +1346,11 @@ fn is_hhmm_time(value: &str) -> bool {
         && minute.is_some_and(|value| value < 60)
 }
 
-fn add_minutes_to_date_time(date: &str, time: &str, minutes_to_add: u32) -> Result<(String, String), String> {
+fn add_minutes_to_date_time(
+    date: &str,
+    time: &str,
+    minutes_to_add: u32,
+) -> Result<(String, String), String> {
     let mut time_parts = time.split(':');
     let hour = time_parts
         .next()
