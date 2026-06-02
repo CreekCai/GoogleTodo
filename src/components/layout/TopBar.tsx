@@ -51,7 +51,7 @@ export function TopBar({
               className={cn(
                 "border-b-2 pb-sm text-body-sm transition-colors",
                 activeTab === tab.id
-                  ? "border-primary font-semibold text-primary dark:border-on-dark dark:text-on-dark"
+                  ? "border-primary font-semibold text-primary dark:border-primary dark:text-on-dark"
                   : "border-transparent text-muted hover:text-ink dark:text-on-dark-soft dark:hover:text-on-dark",
               )}
               onClick={() => onTabChange(tab.id)}
@@ -85,7 +85,7 @@ export function TopBar({
         <label className="relative hidden lg:block">
           <Search className="absolute left-sm top-1/2 -translate-y-1/2 text-muted" size={18} />
           <input
-            className="h-10 w-60 rounded border border-hairline bg-surface-card pl-xl pr-sm text-body-sm text-ink outline-none transition-colors placeholder:text-muted focus:border-outline focus:bg-canvas focus:ring-1 focus:ring-outline dark:border-surface-dark-elevated dark:bg-surface-dark-elevated dark:text-on-dark dark:focus:border-on-dark dark:focus:ring-on-dark"
+            className="h-10 w-60 rounded border border-hairline bg-surface-card pl-xl pr-sm text-body-sm text-ink outline-none transition-colors placeholder:text-muted focus:border-outline focus:bg-canvas focus:ring-1 focus:ring-outline dark:border-surface-dark-elevated dark:bg-surface-dark-elevated dark:text-on-dark dark:focus:border-primary dark:focus:ring-primary"
             value={searchValue}
             onChange={(event) => onSearchChange(event.target.value)}
             placeholder="Search tasks..."

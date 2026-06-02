@@ -44,7 +44,7 @@ export function GoogleProxySection({
               className={cn(
                 "rounded-lg border p-md text-left transition-colors",
                 value.mode === mode.id
-                  ? "border-primary bg-surface-soft text-ink dark:border-on-dark dark:bg-surface-dark dark:text-on-dark"
+                  ? "border-primary bg-surface-soft text-ink dark:border-primary dark:bg-surface-dark dark:text-on-dark"
                   : "border-hairline-soft text-muted hover:border-hairline hover:text-ink dark:border-surface-dark-elevated dark:text-on-dark-soft dark:hover:text-on-dark",
               )}
               onClick={() => onChange({ mode: mode.id, url: mode.id === "custom" ? value.url : "" })}
@@ -59,7 +59,7 @@ export function GoogleProxySection({
           <label className="block space-y-xs">
             <span className="text-caption text-muted dark:text-on-dark-soft">{t(language, "HTTP proxy URL", "HTTP 代理地址")}</span>
             <input
-              className="h-10 w-full rounded border border-hairline bg-canvas px-sm text-body-sm text-ink outline-none focus:border-primary focus:ring-1 focus:ring-primary dark:border-surface-dark-elevated dark:bg-surface-dark dark:text-on-dark dark:focus:border-on-dark dark:focus:ring-on-dark"
+              className="h-10 w-full rounded border border-hairline bg-canvas px-sm text-body-sm text-ink outline-none focus:border-primary focus:ring-1 focus:ring-primary dark:border-surface-dark-elevated dark:bg-surface-dark dark:text-on-dark dark:focus:border-primary dark:focus:ring-primary"
               value={value.url}
               onChange={(event) => onChange({ ...value, url: event.target.value })}
               placeholder="http://127.0.0.1:7890"

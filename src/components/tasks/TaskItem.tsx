@@ -34,7 +34,7 @@ export function TaskItem({
       className={cn(
         "group cursor-pointer rounded-lg border p-md transition-all",
         selected
-          ? "border-primary bg-surface-soft shadow-subtle dark:border-on-dark dark:bg-surface-dark-elevated"
+          ? "border-primary bg-surface-soft shadow-subtle dark:border-primary dark:bg-surface-dark-elevated"
           : "border-transparent bg-canvas hover:border-hairline hover:bg-surface-card dark:bg-surface-dark dark:hover:border-surface-dark-elevated dark:hover:bg-surface-dark-elevated",
         task.completed && "opacity-55",
       )}

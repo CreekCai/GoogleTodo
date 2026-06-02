@@ -26,6 +26,12 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
+  .dark {
+    background: #0b1018;
+    color: #eaf0f8;
+    color-scheme: dark;
+  }
+
   button,
   input,
   textarea,
@@ -51,6 +57,14 @@
   .app-scrollbar::-webkit-scrollbar-thumb {
     background: #98a2b3;
     border-radius: 9999px;
+  }
+
+  .dark .app-scrollbar {
+    scrollbar-color: #405168 transparent;
+  }
+
+  .dark .app-scrollbar::-webkit-scrollbar-thumb {
+    background: #405168;
   }
 
   .app-focus-ring {

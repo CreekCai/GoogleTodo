@@ -9,7 +9,7 @@ function t(language: "en" | "zh", en: string, zh: string) {
 }
 
 export function AboutSection({ language }: { language: "en" | "zh" }) {
-  const [version, setVersion] = useState("0.1.12");
+  const [version, setVersion] = useState("0.1.13");
   const [checking, setChecking] = useState(false);
   const [updateMessage, setUpdateMessage] = useState("");
 

@@ -44,7 +44,7 @@ export function DetailSubtaskEditor({
             <CompletionToggle checked={subtask.completed} size="sm" onClick={() => onToggleSubtask(subtask.id)} />
             <input
               className={cn(
-                "min-w-0 flex-1 border-b border-transparent bg-transparent py-1 text-body-sm outline-none transition-colors hover:border-hairline focus:border-primary focus:ring-0 dark:text-on-dark dark:focus:border-on-dark",
+                "min-w-0 flex-1 border-b border-transparent bg-transparent py-1 text-body-sm outline-none transition-colors hover:border-hairline focus:border-primary focus:ring-0 dark:text-on-dark dark:focus:border-primary",
                 subtask.completed && "text-muted line-through dark:text-on-dark-soft",
               )}
               value={subtask.title}

@@ -640,7 +640,7 @@ pub fn google_update_calendar_event(
         .unwrap_or("Google Calendar");
 
     map_calendar_event(updated, &input.calendar_id, calendar_name, None)
-        .ok_or_else(|| "Google Calendar 日程更新成功，但响应缺少开始时�?.to_string())
+        .ok_or_else(|| "Google Calendar 日程更新成功，但响应缺少开始时间".to_string())
 }
 
 #[tauri::command]
@@ -920,7 +920,7 @@ fn read_refresh_token(app: &AppHandle) -> Result<String, String> {
             read_stored_auth_state(app)
                 .and_then(|state| state.refresh_token)
                 .filter(|value| !value.trim().is_empty())
-                .ok_or_else(|| "未找到已保存�?Google refresh token".to_string())
+                .ok_or_else(|| "未找到已保存的 Google refresh token".to_string())
         })
 }
 
@@ -1082,14 +1082,14 @@ fn normalize_proxy_config(config: GoogleProxyConfig) -> Result<GoogleProxyConfig
             mode: "custom".to_string(),
             url: normalize_proxy_url(url)?,
         }),
-        _ => Err("代理模式不正�?.to_string()),
+        _ => Err("代理模式不正确".to_string()),
     }
 }
 
 fn normalize_proxy_url(url: &str) -> Result<String, String> {
     let trimmed = url.trim();
     if trimmed.is_empty() {
-        return Err("请填�?HTTP 代理地址，例�?http://127.0.0.1:7890".to_string());
+        return Err("请填写 HTTP 代理地址，例如 http://127.0.0.1:7890".to_string());
     }
 
     let normalized = if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
@@ -1109,11 +1109,11 @@ fn send_json<T: for<'de> Deserialize<'de>>(
 ) -> Result<T, String> {
     let response = request
         .send()
-        .map_err(|error| format!("{context}：无法连�?Google 服务：{error}"))?;
+        .map_err(|error| format!("{context}：无法连接 Google 服务：{error}"))?;
     let status = response.status();
     let body = response
         .text()
-        .map_err(|error| format!("{context}：无法读�?Google 响应：{error}"))?;
+        .map_err(|error| format!("{context}：无法读取 Google 响应：{error}"))?;
 
     if !status.is_success() {
         return Err(format!("{context}：HTTP {status}，{body}"));
@@ -1125,11 +1125,11 @@ fn send_json<T: for<'de> Deserialize<'de>>(
 fn send_empty(request: RequestBuilder, context: &str) -> Result<(), String> {
     let response = request
         .send()
-        .map_err(|error| format!("{context}：无法连�?Google 服务：{error}"))?;
+        .map_err(|error| format!("{context}：无法连接 Google 服务：{error}"))?;
     let status = response.status();
     let body = response
         .text()
-        .map_err(|error| format!("{context}：无法读�?Google 响应：{error}"))?;
+        .map_err(|error| format!("{context}：无法读取 Google 响应：{error}"))?;
 
     if !status.is_success() {
         return Err(format!("{context}：HTTP {status}，{body}"));
@@ -1146,15 +1146,15 @@ fn wait_for_oauth_code(listener: TcpListener, expected_state: &str) -> Result<St
     let request_line = request
         .lines()
         .next()
-        .ok_or_else(|| "未收�?OAuth 回调请求".to_string())?;
+        .ok_or_else(|| "未收到 OAuth 回调请求".to_string())?;
     let path = request_line
         .split_whitespace()
         .nth(1)
-        .ok_or_else(|| "OAuth 回调请求格式不正�?.to_string())?;
+        .ok_or_else(|| "OAuth 回调请求格式不正确".to_string())?;
     let callback_url = Url::parse(&format!("http://127.0.0.1{path}")).map_err(to_message)?;
     let params: HashMap<String, String> = callback_url.query_pairs().into_owned().collect();
 
-    let response_body = "<html><body><h2>Google Tasks 登录完成</h2><p>可以关闭这个浏览器窗口，回到桌面应用继续使用�?/p></body></html>";
+    let response_body = "<html><body><h2>Google Tasks 登录完成</h2><p>可以关闭这个浏览器窗口，回到桌面应用继续使用。</p></body></html>";
     let response = format!(
         "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\n\r\n{}",
         response_body.as_bytes().len(),
@@ -1365,11 +1365,11 @@ fn add_minutes_to_date_time(
     let hour = time_parts
         .next()
         .and_then(|part| part.parse::<u32>().ok())
-        .ok_or_else(|| "日程时间格式不正�?.to_string())?;
+        .ok_or_else(|| "日程时间格式不正确".to_string())?;
     let minute = time_parts
         .next()
         .and_then(|part| part.parse::<u32>().ok())
-        .ok_or_else(|| "日程时间格式不正�?.to_string())?;
+        .ok_or_else(|| "日程时间格式不正确".to_string())?;
     let total = hour * 60 + minute + minutes_to_add;
     let next_day = total >= 24 * 60;
     let next_total = total % (24 * 60);
@@ -1386,22 +1386,22 @@ fn next_iso_date(date: &str) -> Result<String, String> {
     let year = date
         .get(0..4)
         .and_then(|part| part.parse::<i32>().ok())
-        .ok_or_else(|| "日程日期格式不正�?.to_string())?;
+        .ok_or_else(|| "日程日期格式不正确".to_string())?;
     let month = date
         .get(5..7)
         .and_then(|part| part.parse::<u32>().ok())
-        .ok_or_else(|| "日程日期格式不正�?.to_string())?;
+        .ok_or_else(|| "日程日期格式不正确".to_string())?;
     let day = date
         .get(8..10)
         .and_then(|part| part.parse::<u32>().ok())
-        .ok_or_else(|| "日程日期格式不正�?.to_string())?;
+        .ok_or_else(|| "日程日期格式不正确".to_string())?;
 
     let days_in_month = match month {
         1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
         4 | 6 | 9 | 11 => 30,
         2 if is_leap_year(year) => 29,
         2 => 28,
-        _ => return Err("日程日期月份不正�?.to_string()),
+        _ => return Err("日程日期月份不正确".to_string()),
     };
 
     let (next_year, next_month, next_day) = if day < days_in_month {
@@ -1433,7 +1433,7 @@ fn month_bounds(month: &str) -> Result<(String, String), String> {
         .map_err(to_message)?;
 
     if !(1..=12).contains(&month) {
-        return Err("月份必须�?01 �?12 之间".to_string());
+        return Err("月份必须在 01 到 12 之间".to_string());
     }
 
     let (next_year, next_month) = if month == 12 {

@@ -1,6 +1,6 @@
 [package]
 name = "google-todo"
-version = "0.1.12"
+version = "0.1.13"
 description = "Google Tasks Windows 桌面客户端"
 authors = ["GoogleTodo"]
 edition = "2021"

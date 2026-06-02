@@ -26,7 +26,7 @@ export function TaskMetaEditor({
         <ListChecks className="text-muted-soft" size={20} />
         <span className="relative flex-1">
           <select
-            className="h-11 w-full appearance-none rounded bg-surface-soft px-sm pr-xl text-body-sm text-ink outline-none transition-colors focus:ring-1 focus:ring-primary dark:bg-surface-dark-elevated dark:text-on-dark dark:focus:ring-on-dark"
+            className="h-11 w-full appearance-none rounded bg-surface-soft px-sm pr-xl text-body-sm text-ink outline-none transition-colors focus:ring-1 focus:ring-primary dark:bg-surface-dark-elevated dark:text-on-dark dark:focus:ring-primary"
             value={listId}
             onChange={(event) => onListChange(event.target.value)}
           >
@@ -53,7 +53,7 @@ export function TaskMetaEditor({
       <label className="flex items-center gap-md">
         <Timer className="text-muted-soft" size={20} />
         <input
-          className="h-9 w-20 rounded bg-surface-soft px-sm text-body-sm text-ink outline-none focus:ring-1 focus:ring-primary dark:bg-surface-dark-elevated dark:text-on-dark dark:focus:ring-on-dark"
+          className="h-9 w-20 rounded bg-surface-soft px-sm text-body-sm text-ink outline-none focus:ring-1 focus:ring-primary dark:bg-surface-dark-elevated dark:text-on-dark dark:focus:ring-primary"
           value={estimate ?? ""}
           onChange={(event) => onEstimateChange(event.target.value)}
           placeholder="30m"

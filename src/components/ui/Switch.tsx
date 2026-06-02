@@ -22,7 +22,7 @@ export function Switch({ checked, onChange, label, className }: SwitchProps) {
           className={cn(
             "absolute inset-0 rounded-full border transition-colors",
             checked
-              ? "border-primary bg-primary dark:border-on-dark dark:bg-on-dark"
+              ? "border-primary bg-primary dark:border-primary dark:bg-primary"
               : "border-hairline bg-surface-strong dark:border-surface-tint dark:bg-surface-dark-elevated",
           )}
         />

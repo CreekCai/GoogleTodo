@@ -2687,7 +2687,7 @@ function DesignSidebar({
                   "app-focus-ring flex h-10 w-full items-center rounded-lg text-left text-title-md transition-colors",
                   collapsed ? "justify-center px-xs" : "gap-sm px-sm",
                   active
-                    ? "bg-primary text-on-dark shadow-subtle dark:bg-on-dark dark:text-primary"
+                    ? "bg-primary text-on-dark shadow-subtle dark:bg-primary dark:text-on-dark"
                     : "text-body hover:bg-surface-card dark:text-on-dark-soft dark:hover:bg-surface-dark",
                 )}
                 onClick={() => onSelectSmartView(item.id)}
@@ -2714,7 +2714,7 @@ function DesignSidebar({
                   className={cn(
                     "app-focus-ring flex h-10 w-full items-center rounded-lg text-left text-title-md transition-colors",
                     collapsed ? "justify-center px-xs" : "gap-sm px-sm",
-                    active ? "bg-primary text-on-dark shadow-subtle dark:bg-on-dark dark:text-primary" : listToneClass(list.id, lists, listColorMap, listCustomColorMap),
+                    active ? "bg-primary text-on-dark shadow-subtle dark:bg-primary dark:text-on-dark" : listToneClass(list.id, lists, listColorMap, listCustomColorMap),
                   )}
                   style={!active ? customColorStyle(listCustomColorMap[list.id]) : undefined}
                   onClick={() => onSelectList(list.id)}
@@ -2973,7 +2973,7 @@ function TaskRow({
       className={cn(
         "rounded-xl border border-hairline bg-surface-card p-md shadow-subtle transition-all hover:-translate-y-px hover:border-primary/30 hover:shadow-panel dark:border-surface-dark-elevated dark:bg-surface-dark-elevated",
         !selected && toneClass,
-        selected && "border-primary bg-canvas ring-2 ring-primary/10 dark:border-on-dark dark:bg-surface-dark",
+        selected && "border-primary bg-canvas ring-2 ring-primary/10 dark:border-primary dark:bg-surface-dark",
       )}
       style={!selected ? toneStyle : undefined}
     >
@@ -3017,7 +3017,7 @@ function CalendarEventRow({
       data-detail-interactive="true"
       className={cn(
         "rounded-xl border border-hairline bg-surface-card p-md shadow-subtle transition-all hover:-translate-y-px hover:border-primary/30 hover:shadow-panel dark:border-surface-dark-elevated dark:bg-surface-dark-elevated",
-        selected && "border-primary ring-2 ring-primary/10 dark:border-on-dark",
+        selected && "border-primary ring-2 ring-primary/10 dark:border-primary",
       )}
       style={{ borderLeftColor: event.color ?? "#8B5CF6", borderLeftWidth: 4 }}
     >
