@@ -34,6 +34,8 @@ const KEYRING_CLIENT_SECRET_USER: &str = "google_tasks_client_secret";
 const KEYRING_PROXY_CONFIG_USER: &str = "google_tasks_proxy_config";
 const KEYRING_USER_PROFILE_USER: &str = "google_tasks_user_profile";
 const AUTH_CACHE_FILE: &str = "google_auth_state.json";
+const BUILTIN_GOOGLE_CLIENT_ID: Option<&str> = option_env!("GOOGLE_TASKS_CLIENT_ID");
+const BUILTIN_GOOGLE_CLIENT_SECRET: Option<&str> = option_env!("GOOGLE_TASKS_CLIENT_SECRET");
 
 pub struct GoogleTasksState {
     auth: Mutex<AuthCache>,
@@ -799,6 +801,11 @@ fn client_id() -> Result<String, String> {
         .map(|value| value.trim().to_string())
         .ok()
         .filter(|value| !value.is_empty())
+        .or_else(|| {
+            BUILTIN_GOOGLE_CLIENT_ID
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+        })
         .ok_or_else(|| "请先配置 Google OAuth Client ID".to_string())
 }
 
@@ -816,6 +823,11 @@ fn client_secret() -> Result<String, String> {
         .map(|value| value.trim().to_string())
         .ok()
         .filter(|value| !value.is_empty())
+        .or_else(|| {
+            BUILTIN_GOOGLE_CLIENT_SECRET
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+        })
         .ok_or_else(|| "请先配置 Google OAuth Client Secret".to_string())
 }
 
