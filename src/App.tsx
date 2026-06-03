@@ -122,7 +122,8 @@ function loadBooleanPreference(key: string, fallback = false) {
   if (typeof window === "undefined") {
     return fallback;
   }
-  return window.localStorage.getItem(key) === "true";
+  const stored = window.localStorage.getItem(key);
+  return stored === null ? fallback : stored === "true";
 }
 
 function loadHotkeys(): HotkeyConfig {
@@ -339,6 +340,7 @@ const uiDictionary: Record<string, string> = {
   "Task Display": "任务显示",
   "Show completed tasks": "显示已完成任务",
   "Show task count": "显示任务数量",
+  "Show count badges when sidebar is collapsed": "侧边栏收起时显示数量角标",
   "Expand subtasks": "展开子任务",
   "Hotkeys": "快捷键",
   "Startup": "启动",
@@ -939,6 +941,9 @@ export default function App() {
   const [selectedCalendarEventId, setSelectedCalendarEventId] = useState("");
   const [showCompleted, setShowCompleted] = useState(true);
   const [showTaskCount, setShowTaskCount] = useState(true);
+  const [showCollapsedSidebarBadges, setShowCollapsedSidebarBadges] = useState(() =>
+    loadBooleanPreference("googleTodoShowCollapsedSidebarBadges", true),
+  );
   const [expandSubtasks, setExpandSubtasks] = useState(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(localDate(0).slice(0, 7));
@@ -1090,6 +1095,13 @@ export default function App() {
   useEffect(() => {
     window.localStorage.setItem("googleTodoTaskActivityHistory", JSON.stringify(taskActivityHistory));
   }, [taskActivityHistory]);
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      "googleTodoShowCollapsedSidebarBadges",
+      showCollapsedSidebarBadges ? "true" : "false",
+    );
+  }, [showCollapsedSidebarBadges]);
 
   useEffect(() => {
     window.localStorage.setItem(
@@ -2452,10 +2464,12 @@ export default function App() {
           showCompleted={showCompleted}
           searchValue={searchValue}
           showTaskCount={showTaskCount}
+          showCollapsedSidebarBadges={showCollapsedSidebarBadges}
           collapsed={sidebarCollapsed}
           signedIn={Boolean(authStatus?.signed_in)}
           userName={authStatus?.signed_in ? authStatus.user_name ?? uiText(language, "Google Tasks User", "Google Tasks 用户") : uiText(language, "Not signed in", "未登录")}
           userEmail={authStatus?.signed_in ? authStatus.user_email ?? authStatus.user_hint ?? uiText(language, "Email not returned", "邮箱信息未返回") : uiText(language, "Open settings to sign in", "点击进入设置后登录")}
+          userPicture={authStatus?.signed_in ? authStatus.user_picture ?? "" : ""}
           listColorMap={listColorMap}
           listCustomColorMap={listCustomColorMap}
           syncState={googleSyncing ? "syncing" : lastGoogleError ? "error" : offlineMode ? "offline" : "online"}
@@ -2726,6 +2740,7 @@ export default function App() {
           theme={theme}
           showCompleted={showCompleted}
           showTaskCount={showTaskCount}
+          showCollapsedSidebarBadges={showCollapsedSidebarBadges}
           expandSubtasks={expandSubtasks}
           googleProxyConfig={googleProxyConfig}
           googleProxySaving={googleProxySaving}
@@ -2735,6 +2750,7 @@ export default function App() {
           googleSyncing={googleSyncing}
           googleUserName={authStatus?.user_name ?? uiText(language, "Google Tasks User", "Google Tasks 用户")}
           googleUserEmail={authStatus?.user_email ?? authStatus?.user_hint ?? ""}
+          googleUserPicture={authStatus?.user_picture ?? ""}
           language={language}
           onGoogleLogin={() => void loginGoogle()}
           onGoogleSync={() => void refreshGoogleWorkspaceData(activeListId)}
@@ -2770,6 +2786,7 @@ export default function App() {
           }}
           onShowCompletedChange={setShowCompleted}
           onShowTaskCountChange={setShowTaskCount}
+          onShowCollapsedSidebarBadgesChange={setShowCollapsedSidebarBadges}
           onExpandSubtasksChange={setExpandSubtasks}
         />
       </div>
@@ -2787,10 +2804,12 @@ type DesignSidebarProps = {
   showCompleted: boolean;
   searchValue: string;
   showTaskCount: boolean;
+  showCollapsedSidebarBadges: boolean;
   collapsed: boolean;
   signedIn: boolean;
   userName: string;
   userEmail: string;
+  userPicture: string;
   listColorMap: Record<string, number>;
   listCustomColorMap: ListCustomColorMap;
   syncState: "online" | "offline" | "syncing" | "error";
@@ -2815,10 +2834,12 @@ function DesignSidebar({
   showCompleted,
   searchValue,
   showTaskCount,
+  showCollapsedSidebarBadges,
   collapsed,
   signedIn,
   userName,
   userEmail,
+  userPicture,
   listColorMap,
   listCustomColorMap,
   syncState,
@@ -2841,6 +2862,7 @@ function DesignSidebar({
 
   const SyncIcon = syncState === "offline" ? CloudOff : syncState === "syncing" ? RefreshCw : Cloud;
   const countableTasks = showCompleted ? tasks : tasks.filter((task) => !task.completed);
+  const showCollapsedCountBadges = collapsed && showTaskCount && showCollapsedSidebarBadges;
   const listScrollRef = useRef<HTMLDivElement | null>(null);
   const [listOverflowing, setListOverflowing] = useState(false);
   const syncClass =
@@ -2887,12 +2909,14 @@ function DesignSidebar({
         )}
         onClick={onAccountClick}
       >
-        <div className={cn(
-          "grid h-9 w-9 shrink-0 place-items-center rounded-lg text-caption font-semibold text-on-dark shadow-subtle",
-          signedIn ? "bg-primary" : "bg-muted",
-        )}>
-          {signedIn ? userName.slice(0, 2).toUpperCase() : uiText(language, "NO", "未")}
-        </div>
+        <UserAvatar
+          signedIn={signedIn}
+          name={userName}
+          email={userEmail}
+          picture={userPicture}
+          fallback={uiText(language, "NO", "未")}
+          className="h-9 w-9 text-caption"
+        />
         {!collapsed ? (
           <>
             <div className="min-w-0 flex-1">
@@ -2935,7 +2959,7 @@ function DesignSidebar({
               <button
                 key={item.id}
                 className={cn(
-                  "app-focus-ring flex h-10 w-full items-center rounded-lg text-left text-title-md transition-colors",
+                  "app-focus-ring relative flex h-10 w-full items-center rounded-lg text-left text-title-md transition-colors",
                   collapsed ? "justify-center px-xs" : "gap-sm px-sm",
                   active
                     ? "bg-primary text-on-dark shadow-subtle dark:bg-primary dark:text-on-dark"
@@ -2945,6 +2969,7 @@ function DesignSidebar({
                 title={item.label}
               >
                 <Icon size={20} />
+                {showCollapsedCountBadges ? <CollapsedCountBadge count={count} active={active} /> : null}
                 {!collapsed ? <span>{item.label}</span> : null}
                 {!collapsed && showTaskCount ? <span className="ml-auto rounded-full bg-surface-card px-xs text-caption text-muted dark:bg-surface-dark-elevated">{count}</span> : null}
               </button>
@@ -2963,7 +2988,7 @@ function DesignSidebar({
                 <button
                   key={list.id}
                   className={cn(
-                    "app-focus-ring flex h-10 w-full items-center rounded-lg text-left text-title-md transition-colors",
+                    "app-focus-ring relative flex h-10 w-full items-center rounded-lg text-left text-title-md transition-colors",
                     collapsed ? "justify-center px-xs" : "gap-sm px-sm",
                     active ? "bg-primary text-on-dark shadow-subtle dark:bg-primary dark:text-on-dark" : listToneClass(list.id, lists, listColorMap, listCustomColorMap),
                   )}
@@ -2972,6 +2997,7 @@ function DesignSidebar({
                   title={list.name}
                 >
                   <ListIcon size={20} className={active ? "" : list.iconClassName} />
+                  {showCollapsedCountBadges ? <CollapsedCountBadge count={count} active={active} /> : null}
                   {!collapsed ? <span className="min-w-0 flex-1 truncate">{list.name}</span> : null}
                   {!collapsed && showTaskCount ? <span className="text-caption opacity-70">{count}</span> : null}
                 </button>
@@ -3025,6 +3051,53 @@ function DesignSidebar({
         </div>
       </div>
     </aside>
+  );
+}
+
+function CollapsedCountBadge({ count, active }: { count: number; active: boolean }) {
+  return (
+    <span
+      className={cn(
+        "pointer-events-none absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full px-xxs text-[10px] font-semibold leading-none shadow-subtle",
+        active ? "bg-on-dark text-primary" : "bg-primary text-on-dark",
+      )}
+    >
+      {count > 99 ? "99+" : count}
+    </span>
+  );
+}
+
+function UserAvatar({
+  signedIn,
+  name,
+  email,
+  picture,
+  fallback,
+  className,
+}: {
+  signedIn: boolean;
+  name: string;
+  email: string;
+  picture?: string | null;
+  fallback: string;
+  className?: string;
+}) {
+  const initials = signedIn ? (name || email || "GT").slice(0, 2).toUpperCase() : fallback;
+
+  return (
+    <div
+      className={cn(
+        "grid shrink-0 place-items-center overflow-hidden rounded-full bg-primary font-semibold text-on-dark shadow-subtle",
+        !signedIn && "bg-muted",
+        className,
+      )}
+    >
+      {signedIn && picture ? (
+        <img className="h-full w-full rounded-full object-cover" src={picture} alt={name || email || "Google user"} />
+      ) : (
+        initials
+      )}
+    </div>
   );
 }
 
@@ -3780,6 +3853,7 @@ function BoardWorkspace({
   const pointerDragRef = useRef<BoardPointerDrag | null>(null);
   const [pointerDragPreview, setPointerDragPreview] = useState<BoardPointerDrag | null>(null);
   const [dragOverPriority, setDragOverPriority] = useState<NonNullable<Task["priority"]> | null>(null);
+  const [hoveredBoardTaskId, setHoveredBoardTaskId] = useState("");
   const columns: Array<{ id: NonNullable<Task["priority"]>; title: string; tasks: Task[] }> = [
     {
       id: "high",
@@ -3907,12 +3981,16 @@ function BoardWorkspace({
                     role="button"
                     tabIndex={0}
                     className={cn(
-                      "app-focus-ring w-full select-none rounded-xl p-md text-left shadow-subtle transition-all hover:-translate-y-px hover:ring-1 hover:ring-primary",
+                      "app-focus-ring w-full select-none rounded-xl border p-md text-left shadow-subtle transition-all hover:-translate-y-px hover:ring-1 hover:ring-primary",
                       selectedTaskId === task.id && "ring-2 ring-primary",
                       pointerDragPreview?.active && pointerDragPreview.taskId === task.id && "scale-[0.98] opacity-35",
-                      listToneClass(task.listId, lists, listColorMap, listCustomColorMap),
+                      hoveredBoardTaskId === task.id
+                        ? listToneClass(task.listId, lists, listColorMap, listCustomColorMap)
+                        : "border-hairline bg-surface-card text-ink dark:border-surface-dark-elevated dark:bg-surface-dark dark:text-on-dark",
                     )}
-                    style={customColorStyle(listCustomColorMap[task.listId])}
+                    style={hoveredBoardTaskId === task.id ? customColorStyle(listCustomColorMap[task.listId]) : undefined}
+                    onMouseEnter={() => setHoveredBoardTaskId(task.id)}
+                    onMouseLeave={() => setHoveredBoardTaskId((current) => (current === task.id ? "" : current))}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" || event.key === " ") {
                         event.preventDefault();

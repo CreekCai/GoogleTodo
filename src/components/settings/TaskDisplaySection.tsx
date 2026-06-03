@@ -4,8 +4,10 @@ type TaskDisplaySectionProps = {
   language: "en" | "zh";
   showCompleted: boolean;
   showTaskCount: boolean;
+  showCollapsedSidebarBadges: boolean;
   onShowCompletedChange: (value: boolean) => void;
   onShowTaskCountChange: (value: boolean) => void;
+  onShowCollapsedSidebarBadgesChange: (value: boolean) => void;
 };
 
 function t(language: "en" | "zh", en: string, zh: string) {
@@ -16,8 +18,10 @@ export function TaskDisplaySection({
   language,
   showCompleted,
   showTaskCount,
+  showCollapsedSidebarBadges,
   onShowCompletedChange,
   onShowTaskCountChange,
+  onShowCollapsedSidebarBadgesChange,
 }: TaskDisplaySectionProps) {
   return (
     <section className="space-y-md">
@@ -32,6 +36,10 @@ export function TaskDisplaySection({
         <label className="flex items-center justify-between rounded-lg p-sm text-body-sm text-body hover:bg-surface-soft dark:text-on-dark-soft dark:hover:bg-surface-dark-elevated">
           {t(language, "Show task count", "显示任务数量")}
           <Switch checked={showTaskCount} onChange={onShowTaskCountChange} />
+        </label>
+        <label className="flex items-center justify-between rounded-lg p-sm text-body-sm text-body hover:bg-surface-soft dark:text-on-dark-soft dark:hover:bg-surface-dark-elevated">
+          {t(language, "Show count badges when sidebar is collapsed", "侧边栏收起时显示数量角标")}
+          <Switch checked={showCollapsedSidebarBadges} onChange={onShowCollapsedSidebarBadgesChange} />
         </label>
       </div>
     </section>

@@ -16,6 +16,7 @@ type SettingsModalProps = {
   theme: ThemeMode;
   showCompleted: boolean;
   showTaskCount: boolean;
+  showCollapsedSidebarBadges: boolean;
   expandSubtasks: boolean;
   googleProxyConfig: GoogleProxyConfig;
   googleProxySaving: boolean;
@@ -25,6 +26,7 @@ type SettingsModalProps = {
   googleSyncing: boolean;
   googleUserName: string;
   googleUserEmail: string;
+  googleUserPicture: string;
   language: "en" | "zh";
   hotkeys: HotkeyConfig;
   startupEnabled: boolean;
@@ -52,6 +54,7 @@ type SettingsModalProps = {
   onGoogleProxySave: () => void;
   onShowCompletedChange: (value: boolean) => void;
   onShowTaskCountChange: (value: boolean) => void;
+  onShowCollapsedSidebarBadgesChange: (value: boolean) => void;
   onExpandSubtasksChange: (value: boolean) => void;
 };
 
@@ -64,6 +67,7 @@ export function SettingsModal({
   theme,
   showCompleted,
   showTaskCount,
+  showCollapsedSidebarBadges,
   expandSubtasks,
   googleProxyConfig,
   googleProxySaving,
@@ -73,6 +77,7 @@ export function SettingsModal({
   googleSyncing,
   googleUserName,
   googleUserEmail,
+  googleUserPicture,
   language,
   hotkeys,
   startupEnabled,
@@ -100,6 +105,7 @@ export function SettingsModal({
   onGoogleProxySave,
   onShowCompletedChange,
   onShowTaskCountChange,
+  onShowCollapsedSidebarBadgesChange,
   onExpandSubtasksChange,
 }: SettingsModalProps) {
   return (
@@ -111,6 +117,7 @@ export function SettingsModal({
           syncing={googleSyncing}
           userName={googleUserName}
           userEmail={googleUserEmail}
+          userPicture={googleUserPicture}
           onLogin={onGoogleLogin}
           onSync={onGoogleSync}
           onSignOut={onGoogleSignOut}
@@ -177,8 +184,10 @@ export function SettingsModal({
           language={language}
           showCompleted={showCompleted}
           showTaskCount={showTaskCount}
+          showCollapsedSidebarBadges={showCollapsedSidebarBadges}
           onShowCompletedChange={onShowCompletedChange}
           onShowTaskCountChange={onShowTaskCountChange}
+          onShowCollapsedSidebarBadgesChange={onShowCollapsedSidebarBadgesChange}
         />
         <AboutSection language={language} />
       </div>

@@ -6,6 +6,7 @@ export type AuthStatus = {
   user_hint?: string | null;
   user_name?: string | null;
   user_email?: string | null;
+  user_picture?: string | null;
 };
 
 export type GoogleProxyMode = "system" | "custom" | "none";

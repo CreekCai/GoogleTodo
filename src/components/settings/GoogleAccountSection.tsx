@@ -7,6 +7,7 @@ type GoogleAccountSectionProps = {
   syncing: boolean;
   userName: string;
   userEmail: string;
+  userPicture: string;
   onLogin: () => void;
   onSync: () => void;
   onSignOut: () => void;
@@ -22,6 +23,7 @@ export function GoogleAccountSection({
   syncing,
   userName,
   userEmail,
+  userPicture,
   onLogin,
   onSync,
   onSignOut,
@@ -35,8 +37,12 @@ export function GoogleAccountSection({
       </h3>
       <div className="flex items-start justify-between rounded-lg border border-hairline bg-surface-card p-lg dark:border-surface-dark-elevated dark:bg-surface-dark-elevated">
         <div className="flex items-center gap-md">
-          <div className="grid h-12 w-12 place-items-center rounded-full bg-badge-emerald text-title-md text-on-dark">
-            {initials}
+          <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-full bg-badge-emerald text-title-md text-on-dark shadow-subtle">
+            {signedIn && userPicture ? (
+              <img className="h-full w-full rounded-full object-cover" src={userPicture} alt={userName || userEmail || "Google user"} />
+            ) : (
+              initials
+            )}
           </div>
           <div>
             <div className="text-title-md text-ink dark:text-on-dark">

@@ -73,6 +73,7 @@ pub struct AuthStatus {
     pub user_hint: Option<String>,
     pub user_name: Option<String>,
     pub user_email: Option<String>,
+    pub user_picture: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -174,6 +175,7 @@ struct TokenResponse {
 struct StoredUserProfile {
     name: Option<String>,
     email: Option<String>,
+    picture: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -186,12 +188,14 @@ struct StoredAuthState {
 struct GoogleUserInfo {
     name: Option<String>,
     email: Option<String>,
+    picture: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 struct GoogleIdTokenClaims {
     name: Option<String>,
     email: Option<String>,
+    picture: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -276,7 +280,8 @@ pub fn google_auth_status(app: AppHandle) -> Result<AuthStatus, String> {
         signed_in,
         user_hint: profile.as_ref().and_then(|value| value.email.clone()),
         user_name: profile.as_ref().and_then(|value| value.name.clone()),
-        user_email: profile.and_then(|value| value.email),
+        user_email: profile.as_ref().and_then(|value| value.email.clone()),
+        user_picture: profile.and_then(|value| value.picture),
     })
 }
 
@@ -397,6 +402,11 @@ pub fn google_oauth_login(
                     .as_ref()
                     .and_then(|profile| profile.email.clone())
             }),
+            picture: user_info_profile.picture.or_else(|| {
+                id_token_profile
+                    .as_ref()
+                    .and_then(|profile| profile.picture.clone())
+            }),
         }),
         Err(_) => id_token_profile,
     };
@@ -413,7 +423,8 @@ pub fn google_oauth_login(
         signed_in: true,
         user_hint: profile.as_ref().and_then(|value| value.email.clone()),
         user_name: profile.as_ref().and_then(|value| value.name.clone()),
-        user_email: profile.and_then(|value| value.email),
+        user_email: profile.as_ref().and_then(|value| value.email.clone()),
+        user_picture: profile.and_then(|value| value.picture),
     })
 }
 
@@ -1209,6 +1220,7 @@ fn fetch_user_profile(client: &Client, token: &str) -> Result<StoredUserProfile,
     Ok(StoredUserProfile {
         name: user_info.name,
         email: user_info.email,
+        picture: user_info.picture,
     })
 }
 
@@ -1216,12 +1228,13 @@ fn profile_from_id_token(id_token: &str) -> Option<StoredUserProfile> {
     let payload = id_token.split('.').nth(1)?;
     let decoded = URL_SAFE_NO_PAD.decode(payload).ok()?;
     let claims: GoogleIdTokenClaims = serde_json::from_slice(&decoded).ok()?;
-    if claims.name.is_none() && claims.email.is_none() {
+    if claims.name.is_none() && claims.email.is_none() && claims.picture.is_none() {
         return None;
     }
     Some(StoredUserProfile {
         name: claims.name,
         email: claims.email,
+        picture: claims.picture,
     })
 }
 
