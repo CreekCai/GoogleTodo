@@ -96,6 +96,7 @@ pub struct GoogleTaskDto {
     pub parent: Option<String>,
     pub position: Option<String>,
     pub completed: bool,
+    pub completed_at: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -216,6 +217,7 @@ struct GoogleTaskItem {
     status: Option<String>,
     parent: Option<String>,
     position: Option<String>,
+    completed: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1229,6 +1231,7 @@ fn calendar_event_url(calendar_id: &str, event_id: &str) -> String {
 
 fn map_task(task: GoogleTaskItem, task_list_id: &str) -> GoogleTaskDto {
     let status = task.status.unwrap_or_else(|| "needsAction".to_string());
+    let completed_at = task.completed;
     GoogleTaskDto {
         id: task.id,
         task_list_id: task_list_id.to_string(),
@@ -1238,6 +1241,7 @@ fn map_task(task: GoogleTaskItem, task_list_id: &str) -> GoogleTaskDto {
         parent: task.parent,
         position: task.position,
         completed: status == "completed",
+        completed_at,
         status,
     }
 }

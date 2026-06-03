@@ -16,6 +16,7 @@ import {
   Cloud,
   CloudOff,
   Folder,
+  GripVertical,
   Home,
   ListChecks,
   PanelLeftClose,
@@ -62,6 +63,15 @@ type LanguageMode = "en" | "zh";
 type SaveState = "idle" | "saving" | "saved" | "error";
 type ListCustomColorMap = Record<string, string>;
 type CalendarEvent = GoogleCalendarEventDto;
+type TaskPriorityMap = Record<string, Task["priority"]>;
+type TaskActivityAction = "completed" | "deleted";
+type TaskActivityRecord = {
+  id: string;
+  taskId: string;
+  action: TaskActivityAction;
+  operatedAt: string;
+  taskSnapshot: Task;
+};
 type TaskListItem =
   | { kind: "task"; id: string; task: Task }
   | { kind: "calendar"; id: string; event: CalendarEvent };
@@ -160,6 +170,68 @@ function loadListColorMap(fallbackLists: TaskListSummary[]): Record<string, numb
   }
 }
 
+function loadTaskPriorityMap(): TaskPriorityMap {
+  if (typeof window === "undefined") {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem("googleTodoTaskPriorities") ?? "{}") as Record<string, unknown>;
+    return Object.fromEntries(
+      Object.entries(parsed).filter(
+        (entry): entry is [string, Task["priority"]] =>
+          entry[1] === "low" || entry[1] === "medium" || entry[1] === "high",
+      ),
+    );
+  } catch {
+    return {};
+  }
+}
+
+function loadTaskActivityHistory(): TaskActivityRecord[] {
+  if (typeof window === "undefined") {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem("googleTodoTaskActivityHistory") ?? "[]") as unknown;
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed.filter((record): record is TaskActivityRecord => {
+      if (!record || typeof record !== "object") {
+        return false;
+      }
+      const candidate = record as Partial<TaskActivityRecord>;
+      return (
+        typeof candidate.id === "string" &&
+        typeof candidate.taskId === "string" &&
+        (candidate.action === "completed" || candidate.action === "deleted") &&
+        typeof candidate.operatedAt === "string" &&
+        Boolean(candidate.taskSnapshot)
+      );
+    });
+  } catch {
+    return [];
+  }
+}
+
+function taskPriority(task: Task): NonNullable<Task["priority"]> {
+  return task.priority ?? "medium";
+}
+
+function priorityLabel(priority: NonNullable<Task["priority"]>, language: LanguageMode) {
+  const labels = {
+    high: uiText(language, "High", "高"),
+    medium: uiText(language, "Medium", "中"),
+    low: uiText(language, "Low", "低"),
+  };
+  return labels[priority];
+}
+
+function mergeTaskPriority(task: Task, taskPriorityMap: TaskPriorityMap): Task {
+  const priority = taskPriorityMap[task.id] ?? task.priority;
+  return priority ? { ...task, priority } : task;
+}
+
 function matchesHotkey(event: KeyboardEvent, hotkey: string) {
   const parts = hotkey.split("+").map((part) => part.trim()).filter(Boolean);
   const mainKey = parts[parts.length - 1]?.toLowerCase();
@@ -246,9 +318,9 @@ const uiDictionary: Record<string, string> = {
   "No subtasks yet.": "暂无子任务。",
   "Add subtask": "添加子任务",
   "Save": "保存",
-  "To Do": "待办",
-  "In Process": "进行中",
-  "Overdue": "已过期",
+  "High Priority": "高优先级",
+  "Medium Priority": "中优先级",
+  "Low Priority": "低优先级",
   "Unscheduled": "未安排",
   "All open tasks have dates.": "所有未完成任务都已有日期。",
   "Manage Lists": "管理清单",
@@ -302,6 +374,7 @@ const uiDictionary: Record<string, string> = {
   "Synced with Google Tasks": "已与 Google Tasks 同步",
   "Local prototype data. Google Tasks is optional for this screen.": "当前显示本地原型数据，此页面可选接入 Google Tasks。",
   "No archived or deleted tasks yet.": "暂时没有归档或已删除任务。",
+  "Completed and deleted tasks are ordered by the latest action.": "已完成和已删除任务会按最近操作时间排序。",
   "Trash is empty.": "回收站为空。",
   "Trash": "回收站",
   "Created": "已创建",
@@ -320,7 +393,7 @@ const uiDictionary: Record<string, string> = {
   "New list name": "新清单名称",
   "Completed tasks are shown here. Deleted tasks are removed from Google Tasks immediately in this phase.": "这里展示已完成任务。当前阶段删除任务会立即从 Google Tasks 中移除。",
   "Deleted Google Tasks are removed immediately. Local trash is reserved for a later recycle-bin workflow.": "删除的 Google Tasks 任务会立即移除。本地回收站功能会在后续阶段补齐。",
-  "Plan work by state without leaving the task system.": "按状态查看任务，不必离开当前任务系统。",
+  "Prioritize current open tasks by dragging them between columns.": "拖动当前未完成任务，在看板中调整优先级。",
   "A calm monthly view for dates. Google Tasks due dates are date-only.": "按月查看任务日期。Google Tasks 的到期日仅支持日期，不支持具体时间。",
   "Google Calendar schedules also appear here.": "这里也会显示 Google Calendar 日程。",
   "All day": "全天",
@@ -653,7 +726,7 @@ function mapGoogleLists(remoteLists: GoogleTaskListDto[]): TaskListSummary[] {
   });
 }
 
-function mapGoogleTasks(remoteTasks: GoogleTaskDto[]) {
+function mapGoogleTasks(remoteTasks: GoogleTaskDto[], taskPriorityMap: TaskPriorityMap = {}) {
   const sorted = [...remoteTasks].sort((first, second) =>
     (first.position ?? "").localeCompare(second.position ?? ""),
   );
@@ -678,7 +751,7 @@ function mapGoogleTasks(remoteTasks: GoogleTaskDto[]) {
     .map<Task>((task) => {
       const dueDate = dueDateFromGoogle(task.due);
       const parsedNotes = splitTaskNotes(task.notes);
-      return {
+      return mergeTaskPriority({
         id: task.id,
         listId: task.task_list_id,
         title: task.title || "Untitled task",
@@ -687,10 +760,11 @@ function mapGoogleTasks(remoteTasks: GoogleTaskDto[]) {
         dueLabel: dueLabelFromDate(dueDate),
         dueText: dueTextFromDate(dueDate),
         completed: task.completed,
+        completedAt: task.completed_at ?? undefined,
         createdAt: task.id.startsWith("local-") ? "Offline" : "Google Tasks",
         lastEdited: task.id.startsWith("local-") ? "pending sync" : "synced",
         subtasks: subtasksByParent.get(task.id) ?? [],
-      };
+      }, taskPriorityMap);
     });
 }
 
@@ -885,6 +959,8 @@ export default function App() {
       return {};
     }
   });
+  const [taskPriorityMap, setTaskPriorityMap] = useState<TaskPriorityMap>(() => loadTaskPriorityMap());
+  const [taskActivityHistory, setTaskActivityHistory] = useState<TaskActivityRecord[]>(() => loadTaskActivityHistory());
   const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null);
   const [googleSyncing, setGoogleSyncing] = useState(false);
   const [googleProxySaving, setGoogleProxySaving] = useState(false);
@@ -1002,6 +1078,18 @@ export default function App() {
   useEffect(() => {
     window.localStorage.setItem("googleTodoListCustomColors", JSON.stringify(listCustomColorMap));
   }, [listCustomColorMap]);
+
+  useEffect(() => {
+    window.localStorage.setItem("googleTodoTaskPriorities", JSON.stringify(taskPriorityMap));
+  }, [taskPriorityMap]);
+
+  useEffect(() => {
+    setTasks((current) => current.map((task) => mergeTaskPriority(task, taskPriorityMap)));
+  }, [taskPriorityMap]);
+
+  useEffect(() => {
+    window.localStorage.setItem("googleTodoTaskActivityHistory", JSON.stringify(taskActivityHistory));
+  }, [taskActivityHistory]);
 
   useEffect(() => {
     window.localStorage.setItem(
@@ -1179,6 +1267,25 @@ export default function App() {
     });
   }, [activeSmartView, calendarEvents, searchValue, visibleTasks]);
 
+  const taskActivityItems = useMemo(() => {
+    const historyKeys = new Set(taskActivityHistory.map((record) => `${record.action}:${record.taskId}`));
+    const fallbackCompleted = tasks
+      .filter((task) => task.completed && !historyKeys.has(`completed:${task.id}`))
+      .map<TaskActivityRecord>((task, index) => ({
+        id: `fallback-completed-${task.id}`,
+        taskId: task.id,
+        action: "completed",
+        operatedAt: activityTimestampForCompletedTask(task, index),
+        taskSnapshot: task,
+      }));
+
+    return [...taskActivityHistory, ...fallbackCompleted].sort((first, second) => {
+      const firstTime = parseActivityDate(first.operatedAt)?.getTime() ?? 0;
+      const secondTime = parseActivityDate(second.operatedAt)?.getTime() ?? 0;
+      return (Number.isNaN(secondTime) ? 0 : secondTime) - (Number.isNaN(firstTime) ? 0 : firstTime);
+    });
+  }, [taskActivityHistory, tasks]);
+
   const applySnapshot = (
     snapshot: CachedSnapshot,
     message?: string,
@@ -1190,7 +1297,7 @@ export default function App() {
     }
 
     const nextLists = mapGoogleLists(snapshot.task_lists);
-    const nextTasks = mapGoogleTasks(snapshot.tasks);
+    const nextTasks = mapGoogleTasks(snapshot.tasks, taskPriorityMap);
     const targetListId = preferredListId ?? activeListId;
     const nextActiveListId = nextLists.some((list) => list.id === targetListId)
       ? targetListId
@@ -1220,7 +1327,7 @@ export default function App() {
 
   const applySyncResult = (result: SyncResult, preferredListId?: string) => {
     const nextLists = mapGoogleLists(result.snapshot.task_lists);
-    const nextTasks = mapGoogleTasks(result.snapshot.tasks);
+    const nextTasks = mapGoogleTasks(result.snapshot.tasks, taskPriorityMap);
     const nextActiveListId =
       preferredListId && nextLists.some((list) => list.id === preferredListId)
         ? preferredListId
@@ -1613,6 +1720,46 @@ export default function App() {
     }
   };
 
+  const recordCompletedActivity = (task: Task, completed: boolean) => {
+    const operatedAt = new Date().toISOString();
+    setTaskActivityHistory((current) => {
+      const withoutTaskCompletion = current.filter(
+        (record) => !(record.taskId === task.id && record.action === "completed"),
+      );
+      if (!completed) {
+        return withoutTaskCompletion;
+      }
+      return [
+        {
+          id: `completed-${task.id}`,
+          taskId: task.id,
+          action: "completed",
+          operatedAt,
+          taskSnapshot: { ...task, completed: true, completedAt: operatedAt, lastEdited: "just now" },
+        },
+        ...withoutTaskCompletion,
+      ];
+    });
+  };
+
+  const recordDeletedActivity = (task: Task) => {
+    setTaskActivityHistory((current) => [
+      {
+        id: `deleted-${task.id}-${Date.now()}`,
+        taskId: task.id,
+        action: "deleted",
+        operatedAt: new Date().toISOString(),
+        taskSnapshot: task,
+      },
+      ...current.filter((record) => !(record.taskId === task.id && record.action === "deleted")),
+    ]);
+  };
+
+  const changeTaskPriority = (taskId: string, priority: NonNullable<Task["priority"]>) => {
+    setTaskPriorityMap((current) => ({ ...current, [taskId]: priority }));
+    updateTask(taskId, { priority, lastEdited: "just now" });
+  };
+
   const persistGoogleTaskUpdate = async (taskId: string, patch: Partial<Task>) => {
     if (!googleReady) {
       setSyncMessage(uiText(language, "Google is not connected. Changes are only local for now.", "当前未连接 Google，修改暂时只保存在本地界面。"));
@@ -1644,7 +1791,7 @@ export default function App() {
         due: "dueText" in patch || "dueLabel" in patch ? dueForGoogle(task, patch) : undefined,
         status: patch.completed === undefined ? undefined : patch.completed ? "completed" : "needsAction",
       });
-      const [mapped] = mapGoogleTasks([remote]);
+      const [mapped] = mapGoogleTasks([remote], taskPriorityMap);
       updateTask(taskId, { ...mapped, subtasks: task.subtasks, reminderTime: mapped.reminderTime });
       setSyncMessage(
         remote.id.startsWith("local-")
@@ -1800,7 +1947,7 @@ export default function App() {
             ? dueForGoogle({}, { dueText: dueTextByView[dueLabel], dueLabel })
             : undefined,
         });
-        const [newTask] = mapGoogleTasks([remoteTask]);
+        const [newTask] = mapGoogleTasks([remoteTask], taskPriorityMap);
         setTasks((current) => [newTask, ...current]);
         setPendingCount((current) => current + (remoteTask.id.startsWith("local-") ? 1 : 0));
         setSyncMessage(
@@ -1854,7 +2001,7 @@ export default function App() {
             dueLabel: quickDraft.dueLabel,
           }),
         });
-        const [newTask] = mapGoogleTasks([remoteTask]);
+        const [newTask] = mapGoogleTasks([remoteTask], taskPriorityMap);
         setTasks((current) => [newTask, ...current]);
         setActiveListId(newTask.listId);
         setActiveSmartView(null);
@@ -1946,11 +2093,13 @@ export default function App() {
       return;
     }
     const completed = !task.completed;
+    const completedAt = completed ? new Date().toISOString() : undefined;
     setTasks((current) =>
       current.map((item) =>
-        item.id === taskId ? { ...item, completed, lastEdited: "just now" } : item,
+        item.id === taskId ? { ...item, completed, completedAt, lastEdited: "just now" } : item,
       ),
     );
+    recordCompletedActivity(task, completed);
     await persistGoogleTaskUpdate(taskId, { completed });
   };
 
@@ -2040,6 +2189,7 @@ export default function App() {
         return;
       }
     }
+    recordDeletedActivity(selectedTask);
     const remainingTasks = tasks.filter((task) => task.id !== selectedTask.id);
     setTasks(remainingTasks);
     setSelectedTaskId("");
@@ -2391,41 +2541,83 @@ export default function App() {
           ) : null}
 
           {activeView === "board" ? (
-            <BoardWorkspace
-              tasks={scopedTasks}
-              lists={lists}
-              listColorMap={listColorMap}
-              listCustomColorMap={listCustomColorMap}
-              language={language}
-              onSelectTask={(taskId) => {
-                setSelectedCalendarEventId("");
-                setSelectedTaskId(taskId);
-                setActiveView("list");
-              }}
-            />
+            <div className="flex min-h-0 flex-1" onClick={closeDetailsFromPage}>
+              <BoardWorkspace
+                tasks={scopedTasks}
+                lists={lists}
+                listColorMap={listColorMap}
+                listCustomColorMap={listCustomColorMap}
+                language={language}
+                selectedTaskId={selectedTaskId}
+                onSelectTask={(taskId) => {
+                  setSelectedCalendarEventId("");
+                  setSelectedTaskId(taskId);
+                }}
+                onChangeTaskPriority={changeTaskPriority}
+              />
+              {selectedTask ? (
+                <TaskDetailsPanel
+                  task={selectedTask}
+                  lists={lists}
+                  language={language}
+                  onUpdateTask={updateTask}
+                  onPersistTask={(taskId, patch) => void autoPersistTask(taskId, patch)}
+                  onChangeTaskList={changeTaskList}
+                  onDeleteTask={() => void deleteSelectedTask()}
+                  saveState={saveState}
+                  saveMessage={saveMessage}
+                  onClose={() => setSelectedTaskId("")}
+                />
+              ) : null}
+            </div>
           ) : null}
 
           {activeView === "calendar" ? (
-            <CalendarWorkspace
-              tasks={scopedTasks}
-              events={calendarEvents}
-              lists={lists}
-              listColorMap={listColorMap}
-              listCustomColorMap={listCustomColorMap}
-              language={language}
-              monthValue={calendarMonth}
-              onMonthChange={setCalendarMonth}
-              onSelectTask={(taskId) => {
-                setSelectedCalendarEventId("");
-                setSelectedTaskId(taskId);
-                setActiveView("list");
-              }}
-              onSelectCalendarEvent={(eventId) => {
-                setSelectedTaskId("");
-                setSelectedCalendarEventId(eventId);
-                setActiveView("list");
-              }}
-            />
+            <div className="flex min-h-0 flex-1" onClick={closeDetailsFromPage}>
+              <CalendarWorkspace
+                tasks={scopedTasks}
+                events={calendarEvents}
+                lists={lists}
+                listColorMap={listColorMap}
+                listCustomColorMap={listCustomColorMap}
+                language={language}
+                monthValue={calendarMonth}
+                onMonthChange={setCalendarMonth}
+                onSelectTask={(taskId) => {
+                  setSelectedCalendarEventId("");
+                  setSelectedTaskId(taskId);
+                }}
+                onSelectCalendarEvent={(eventId) => {
+                  setSelectedTaskId("");
+                  setSelectedCalendarEventId(eventId);
+                }}
+              />
+              {selectedCalendarEvent ? (
+                <CalendarEventDetailsPanel
+                  event={selectedCalendarEvent}
+                  language={language}
+                  onUpdateEvent={updateCalendarEvent}
+                  onPersistEvent={(eventId, patch) => void persistCalendarEventUpdate(eventId, patch)}
+                  onDeleteEvent={() => void deleteSelectedCalendarEvent()}
+                  saveState={saveState}
+                  saveMessage={saveMessage}
+                  onClose={() => setSelectedCalendarEventId("")}
+                />
+              ) : selectedTask ? (
+                <TaskDetailsPanel
+                  task={selectedTask}
+                  lists={lists}
+                  language={language}
+                  onUpdateTask={updateTask}
+                  onPersistTask={(taskId, patch) => void autoPersistTask(taskId, patch)}
+                  onChangeTaskList={changeTaskList}
+                  onDeleteTask={() => void deleteSelectedTask()}
+                  saveState={saveState}
+                  saveMessage={saveMessage}
+                  onClose={() => setSelectedTaskId("")}
+                />
+              ) : null}
+            </div>
           ) : null}
 
           {activeView === "manage" ? (
@@ -2440,29 +2632,65 @@ export default function App() {
           ) : null}
 
           {activeView === "archive" ? (
-            <UtilityWorkspace
-              title="Archive / Trash"
-              description="Completed tasks are shown here. Deleted tasks are removed from Google Tasks immediately in this phase."
-              tasks={tasks.filter((task) => task.completed)}
-              emptyText="No archived or deleted tasks yet."
-              language={language}
-              onSelectTask={(taskId) => {
-                setSelectedCalendarEventId("");
-                setSelectedTaskId(taskId);
-                setActiveView("list");
-              }}
-            />
+            <div className="flex min-h-0 flex-1" onClick={closeDetailsFromPage}>
+              <UtilityWorkspace
+                title="Archive / Trash"
+                description="Completed and deleted tasks are ordered by the latest action."
+                items={taskActivityItems}
+                emptyText="No archived or deleted tasks yet."
+                language={language}
+                selectedTaskId={selectedTaskId}
+                onSelectTask={(taskId) => {
+                  if (!tasks.some((task) => task.id === taskId)) {
+                    return;
+                  }
+                  setSelectedCalendarEventId("");
+                  setSelectedTaskId(taskId);
+                }}
+              />
+              {selectedTask ? (
+                <TaskDetailsPanel
+                  task={selectedTask}
+                  lists={lists}
+                  language={language}
+                  onUpdateTask={updateTask}
+                  onPersistTask={(taskId, patch) => void autoPersistTask(taskId, patch)}
+                  onChangeTaskList={changeTaskList}
+                  onDeleteTask={() => void deleteSelectedTask()}
+                  saveState={saveState}
+                  saveMessage={saveMessage}
+                  onClose={() => setSelectedTaskId("")}
+                />
+              ) : null}
+            </div>
           ) : null}
 
           {activeView === "trash" ? (
-            <UtilityWorkspace
-              title="Trash"
-              description="Deleted Google Tasks are removed immediately. Local trash is reserved for a later recycle-bin workflow."
-              tasks={[]}
-              emptyText="Trash is empty."
-              language={language}
-              onSelectTask={() => undefined}
-            />
+            <div className="flex min-h-0 flex-1" onClick={closeDetailsFromPage}>
+              <UtilityWorkspace
+                title="Trash"
+                description="Deleted Google Tasks are removed immediately. Local trash is reserved for a later recycle-bin workflow."
+                items={taskActivityItems.filter((record) => record.action === "deleted")}
+                emptyText="Trash is empty."
+                language={language}
+                selectedTaskId={selectedTaskId}
+                onSelectTask={() => undefined}
+              />
+              {selectedTask ? (
+                <TaskDetailsPanel
+                  task={selectedTask}
+                  lists={lists}
+                  language={language}
+                  onUpdateTask={updateTask}
+                  onPersistTask={(taskId, patch) => void autoPersistTask(taskId, patch)}
+                  onChangeTaskList={changeTaskList}
+                  onDeleteTask={() => void deleteSelectedTask()}
+                  saveState={saveState}
+                  saveMessage={saveMessage}
+                  onClose={() => setSelectedTaskId("")}
+                />
+              ) : null}
+            </div>
           ) : null}
         </main>
         <ManageListsModal
@@ -2613,6 +2841,8 @@ function DesignSidebar({
 
   const SyncIcon = syncState === "offline" ? CloudOff : syncState === "syncing" ? RefreshCw : Cloud;
   const countableTasks = showCompleted ? tasks : tasks.filter((task) => !task.completed);
+  const listScrollRef = useRef<HTMLDivElement | null>(null);
+  const [listOverflowing, setListOverflowing] = useState(false);
   const syncClass =
     syncState === "error"
       ? "text-error"
@@ -2621,6 +2851,27 @@ function DesignSidebar({
         : syncState === "syncing"
           ? "text-secondary"
           : "text-success";
+
+  useEffect(() => {
+    const element = listScrollRef.current;
+    if (!element) {
+      return;
+    }
+    const updateOverflow = () => {
+      setListOverflowing(element.scrollHeight > element.clientHeight + 1);
+    };
+    updateOverflow();
+    const resizeObserver = new ResizeObserver(updateOverflow);
+    resizeObserver.observe(element);
+    Array.from(element.children).forEach((child) => resizeObserver.observe(child));
+    element.addEventListener("scroll", updateOverflow);
+    window.addEventListener("resize", updateOverflow);
+    return () => {
+      resizeObserver.disconnect();
+      element.removeEventListener("scroll", updateOverflow);
+      window.removeEventListener("resize", updateOverflow);
+    };
+  }, [collapsed, lists.length, smartViews.length, showTaskCount, tasks.length]);
 
   return (
     <aside
@@ -2672,7 +2923,7 @@ function DesignSidebar({
         </>
       ) : null}
 
-      <div id="sidebar-list-scroll" className="mt-md min-h-0 flex-1 overflow-y-auto pr-1 app-scrollbar">
+      <div ref={listScrollRef} id="sidebar-list-scroll" className="mt-md min-h-0 flex-1 overflow-y-auto pr-1 app-scrollbar">
         <nav className="space-y-xs">
           {smartViews.map((item) => {
             const Icon = item.icon;
@@ -2731,17 +2982,19 @@ function DesignSidebar({
       </div>
 
       <div className="shrink-0 border-t border-hairline pt-md dark:border-surface-dark">
-        <button
-          className={cn(
-            "mb-sm flex h-8 w-full items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-card dark:hover:bg-surface-dark",
-            collapsed && "h-9",
-          )}
-          onClick={() => document.getElementById("sidebar-list-scroll")?.scrollBy({ top: 160, behavior: "smooth" })}
-          title={uiText(language, "Scroll lists", "滚动清单")}
-        >
-          <ChevronDown size={18} />
-          {!collapsed ? <span className="ml-xs text-caption">{uiText(language, "More", "更多")}</span> : null}
-        </button>
+        {listOverflowing ? (
+          <button
+            className={cn(
+              "mb-sm flex h-8 w-full items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-card dark:hover:bg-surface-dark",
+              collapsed && "h-9",
+            )}
+            onClick={() => listScrollRef.current?.scrollBy({ top: 160, behavior: "smooth" })}
+            title={uiText(language, "Scroll lists", "滚动清单")}
+          >
+            <ChevronDown size={18} />
+            {!collapsed ? <span className="ml-xs text-caption">{uiText(language, "More", "更多")}</span> : null}
+          </button>
+        ) : null}
         <button
           className={cn(
             "app-focus-ring flex h-10 w-full items-center rounded-lg text-body transition-colors hover:bg-surface-card dark:text-on-dark-soft dark:hover:bg-surface-dark",
@@ -3496,71 +3749,267 @@ type BoardWorkspaceProps = {
   listColorMap: Record<string, number>;
   listCustomColorMap: ListCustomColorMap;
   language: LanguageMode;
+  selectedTaskId: string;
   onSelectTask: (taskId: string) => void;
+  onChangeTaskPriority: (taskId: string, priority: NonNullable<Task["priority"]>) => void;
 };
 
-function BoardWorkspace({ tasks, lists, listColorMap, listCustomColorMap, language, onSelectTask }: BoardWorkspaceProps) {
-  const columns = [
+type BoardPointerDrag = {
+  taskId: string;
+  startX: number;
+  startY: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  offsetX: number;
+  offsetY: number;
+  active: boolean;
+};
+
+function BoardWorkspace({
+  tasks,
+  lists,
+  listColorMap,
+  listCustomColorMap,
+  language,
+  selectedTaskId,
+  onSelectTask,
+  onChangeTaskPriority,
+}: BoardWorkspaceProps) {
+  const pointerDragRef = useRef<BoardPointerDrag | null>(null);
+  const [pointerDragPreview, setPointerDragPreview] = useState<BoardPointerDrag | null>(null);
+  const [dragOverPriority, setDragOverPriority] = useState<NonNullable<Task["priority"]> | null>(null);
+  const columns: Array<{ id: NonNullable<Task["priority"]>; title: string; tasks: Task[] }> = [
     {
-      id: "todo",
-      title: uiText(language, "To Do", "待办"),
-      tasks: sortTasksByTime(tasks.filter((task) => !task.completed && task.dueLabel !== "today" && task.dueLabel !== "past")),
+      id: "high",
+      title: uiText(language, "High Priority", "高优先级"),
+      tasks: sortTasksByTime(tasks.filter((task) => !task.completed && taskPriority(task) === "high")),
     },
     {
-      id: "progress",
-      title: uiText(language, "In Process", "进行中"),
-      tasks: sortTasksByTime(tasks.filter((task) => !task.completed && task.dueLabel === "today")),
+      id: "medium",
+      title: uiText(language, "Medium Priority", "中优先级"),
+      tasks: sortTasksByTime(tasks.filter((task) => !task.completed && taskPriority(task) === "medium")),
     },
     {
-      id: "overdue",
-      title: uiText(language, "Overdue", "已过期"),
-      tasks: sortTasksByTime(tasks.filter((task) => !task.completed && task.dueLabel === "past")),
+      id: "low",
+      title: uiText(language, "Low Priority", "低优先级"),
+      tasks: sortTasksByTime(tasks.filter((task) => !task.completed && taskPriority(task) === "low")),
     },
   ];
+  const openTasks = tasks.filter((task) => !task.completed);
+  const pointerDraggedTask = pointerDragPreview ? tasks.find((task) => task.id === pointerDragPreview.taskId) : null;
+
+  useEffect(() => {
+    const priorityFromPoint = (x: number, y: number) => {
+      const target = document.elementFromPoint(x, y) as HTMLElement | null;
+      const column = target?.closest("[data-board-priority]") as HTMLElement | null;
+      const priority = column?.dataset.boardPriority;
+      return priority === "high" || priority === "medium" || priority === "low" ? priority : null;
+    };
+
+    const resetDocumentDragState = () => {
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    const handlePointerMove = (event: globalThis.PointerEvent) => {
+      const current = pointerDragRef.current;
+      if (!current) {
+        return;
+      }
+      event.preventDefault();
+      const distance = Math.hypot(event.clientX - current.startX, event.clientY - current.startY);
+      const next = {
+        ...current,
+        x: event.clientX,
+        y: event.clientY,
+        active: current.active || distance > 6,
+      };
+      pointerDragRef.current = next;
+      setPointerDragPreview(next);
+      if (next.active) {
+        document.body.style.cursor = "grabbing";
+        document.body.style.userSelect = "none";
+        setDragOverPriority(priorityFromPoint(event.clientX, event.clientY));
+      }
+    };
+
+    const handlePointerUp = (event: globalThis.PointerEvent) => {
+      const current = pointerDragRef.current;
+      if (!current) {
+        return;
+      }
+      event.preventDefault();
+      pointerDragRef.current = null;
+      setPointerDragPreview(null);
+      setDragOverPriority(null);
+      resetDocumentDragState();
+      if (current.active) {
+        const priority = priorityFromPoint(event.clientX, event.clientY);
+        const draggedTask = tasks.find((task) => task.id === current.taskId);
+        if (priority && (!draggedTask || priority !== taskPriority(draggedTask))) {
+          onChangeTaskPriority(current.taskId, priority);
+        }
+      }
+    };
+
+    const handlePointerCancel = () => {
+      pointerDragRef.current = null;
+      setPointerDragPreview(null);
+      setDragOverPriority(null);
+      resetDocumentDragState();
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerCancel);
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerCancel);
+      resetDocumentDragState();
+    };
+  }, [onChangeTaskPriority, tasks]);
 
   return (
-    <section className="min-h-0 flex-1 overflow-y-auto bg-canvas p-lg dark:bg-surface-dark">
+    <section className="min-h-0 flex-1 overflow-auto bg-canvas p-lg dark:bg-surface-dark">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-display text-display-md text-ink dark:text-on-dark">{uiText(language, "Board", "看板")}</h1>
-          <p className="mt-xs text-body-md text-muted">{uiText(language, "Plan work by state without leaving the task system.", "按状态查看任务，不必离开当前任务系统。")}</p>
+          <p className="mt-xs text-body-md text-muted">{uiText(language, "Prioritize current open tasks by dragging them between columns.", "拖动当前未完成任务，在看板中调整优先级。")}</p>
         </div>
+        <Badge>{uiText(language, `${openTasks.length} open`, `${openTasks.length} 个未完成`)}</Badge>
       </div>
       <div className="mt-lg grid min-w-[760px] grid-cols-3 gap-lg">
         {columns.map((column) => (
-          <div key={column.id} className="rounded-xl border border-hairline bg-surface-soft p-md shadow-subtle dark:border-surface-dark-elevated dark:bg-surface-dark-elevated">
+          <div
+            key={column.id}
+            data-board-priority={column.id}
+            className={cn(
+              "min-h-[360px] rounded-xl border border-hairline bg-surface-soft p-md shadow-subtle transition-shadow dark:border-surface-dark-elevated dark:bg-surface-dark-elevated",
+              dragOverPriority === column.id && "ring-2 ring-primary",
+            )}
+          >
             <div className="flex items-center justify-between">
               <h2 className="text-title-lg text-ink dark:text-on-dark">{column.title}</h2>
               <Badge>{column.tasks.length}</Badge>
             </div>
             <div className="mt-md space-y-sm">
               {column.tasks.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-hairline bg-surface-card p-md text-body-sm text-muted">{uiText(language, "No tasks", "暂无任务")}</div>
+                <div className="rounded-xl border border-dashed border-hairline bg-surface-card p-md text-body-sm text-muted dark:border-surface-dark dark:bg-surface-dark">{uiText(language, "Drop tasks here", "拖动任务到这里")}</div>
               ) : (
                 column.tasks.map((task) => (
-                  <button
+                  <article
                     key={task.id}
-                    className={cn("app-focus-ring w-full rounded-xl p-md text-left shadow-subtle transition-all hover:-translate-y-px hover:ring-1 hover:ring-primary", listToneClass(task.listId, lists, listColorMap, listCustomColorMap))}
+                    data-board-card="true"
+                    data-detail-interactive="true"
+                    role="button"
+                    tabIndex={0}
+                    className={cn(
+                      "app-focus-ring w-full select-none rounded-xl p-md text-left shadow-subtle transition-all hover:-translate-y-px hover:ring-1 hover:ring-primary",
+                      selectedTaskId === task.id && "ring-2 ring-primary",
+                      pointerDragPreview?.active && pointerDragPreview.taskId === task.id && "scale-[0.98] opacity-35",
+                      listToneClass(task.listId, lists, listColorMap, listCustomColorMap),
+                    )}
                     style={customColorStyle(listCustomColorMap[task.listId])}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        onSelectTask(task.id);
+                      }
+                    }}
                     onClick={() => onSelectTask(task.id)}
                   >
-                    <div className="text-title-md text-ink dark:text-on-dark">{task.title}</div>
-                    <div className="mt-sm flex flex-wrap gap-xs text-caption text-muted">
-                      <Badge
-                        className={listLabelToneClass(task.listId, lists, listColorMap, listCustomColorMap)}
-                        style={customColorStyle(listCustomColorMap[task.listId], "label")}
+                    <div className="flex items-start gap-sm">
+                      <button
+                        type="button"
+                        className="app-focus-ring -ml-xs mt-0.5 grid h-8 w-8 shrink-0 cursor-grab place-items-center rounded-md text-muted transition-colors hover:bg-surface-card hover:text-primary active:cursor-grabbing dark:hover:bg-surface-dark"
+                        style={{ touchAction: "none" }}
+                        title={uiText(language, "Drag to change priority", "拖动调整优先级")}
+                        aria-label={uiText(language, "Drag to change priority", "拖动调整优先级")}
+                        onClick={(event) => event.stopPropagation()}
+                        onPointerDown={(event) => {
+                          if (event.button !== 0) {
+                            return;
+                          }
+                          const card = event.currentTarget.closest("[data-board-card]") as HTMLElement | null;
+                          const rect = card?.getBoundingClientRect();
+                          if (!rect) {
+                            return;
+                          }
+                          event.preventDefault();
+                          event.stopPropagation();
+                          const nextDrag = {
+                            taskId: task.id,
+                            startX: event.clientX,
+                            startY: event.clientY,
+                            x: event.clientX,
+                            y: event.clientY,
+                            width: rect.width,
+                            height: rect.height,
+                            offsetX: event.clientX - rect.left,
+                            offsetY: event.clientY - rect.top,
+                            active: false,
+                          };
+                          pointerDragRef.current = nextDrag;
+                          setPointerDragPreview(nextDrag);
+                        }}
                       >
-                        {lists.find((list) => list.id === task.listId)?.name ?? uiText(language, "Tasks", "任务")}
-                      </Badge>
-                      {task.dueText ? <Badge className={dueLabelToneClass(task)}>{displayDueText(task.dueText, language)}</Badge> : null}
+                        <GripVertical size={16} />
+                      </button>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-title-md text-ink dark:text-on-dark">{task.title}</div>
+                        <div className="mt-sm flex flex-wrap gap-xs text-caption text-muted">
+                          <Badge
+                            className={listLabelToneClass(task.listId, lists, listColorMap, listCustomColorMap)}
+                            style={customColorStyle(listCustomColorMap[task.listId], "label")}
+                          >
+                            {lists.find((list) => list.id === task.listId)?.name ?? uiText(language, "Tasks", "任务")}
+                          </Badge>
+                          <Badge>{priorityLabel(taskPriority(task), language)}</Badge>
+                          {task.dueText ? <Badge className={dueLabelToneClass(task)}>{displayDueText(task.dueText, language)}</Badge> : null}
+                        </div>
+                      </div>
                     </div>
-                  </button>
+                  </article>
                 ))
               )}
+              {pointerDragPreview?.active && dragOverPriority === column.id ? (
+                <div className="h-16 rounded-xl border-2 border-dashed border-primary/60 bg-primary/5 dark:bg-primary/10" />
+              ) : null}
             </div>
           </div>
         ))}
       </div>
+      {pointerDragPreview?.active && pointerDraggedTask ? (
+        <div
+          className={cn(
+            "pointer-events-none fixed z-50 rounded-xl border border-primary/40 p-md text-left opacity-95 shadow-panel",
+            listToneClass(pointerDraggedTask.listId, lists, listColorMap, listCustomColorMap),
+          )}
+          style={{
+            ...customColorStyle(listCustomColorMap[pointerDraggedTask.listId]),
+            left: pointerDragPreview.x - pointerDragPreview.offsetX,
+            top: pointerDragPreview.y - pointerDragPreview.offsetY,
+            width: pointerDragPreview.width,
+            maxWidth: 320,
+          }}
+        >
+          <div className="flex items-start gap-sm">
+            <span className="-ml-xs mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-md text-primary">
+              <GripVertical size={16} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-title-md text-ink dark:text-on-dark">{pointerDraggedTask.title}</div>
+              <div className="mt-sm flex flex-wrap gap-xs text-caption text-muted">
+                <Badge>{priorityLabel(taskPriority(pointerDraggedTask), language)}</Badge>
+                {pointerDraggedTask.dueText ? <Badge className={dueLabelToneClass(pointerDraggedTask)}>{displayDueText(pointerDraggedTask.dueText, language)}</Badge> : null}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -3590,6 +4039,7 @@ function CalendarWorkspace({
   onSelectTask,
   onSelectCalendarEvent,
 }: CalendarWorkspaceProps) {
+  const [hoveredTaskState, setHoveredTaskState] = useState<{ taskId: string; x: number; y: number } | null>(null);
   const [year, month] = monthValue.split("-").map(Number);
   const daysInMonth = new Date(year, month, 0).getDate();
   const firstWeekday = new Date(year, month - 1, 1).getDay();
@@ -3605,6 +4055,24 @@ function CalendarWorkspace({
     const endDate = event.end?.slice(0, 10) ?? startDate;
     return startDate <= monthEnd && endDate >= monthStart;
   });
+  const hoveredTask = hoveredTaskState ? tasks.find((task) => task.id === hoveredTaskState.taskId) ?? null : null;
+  const hoveredTaskListName = hoveredTask
+    ? lists.find((list) => list.id === hoveredTask.listId)?.name ?? uiText(language, "Tasks", "任务")
+    : "";
+  const updateTaskHover = (taskId: string, event: { clientX: number; clientY: number }) => {
+    setHoveredTaskState({ taskId, x: event.clientX, y: event.clientY });
+  };
+  const clearTaskHover = (taskId: string) => {
+    setHoveredTaskState((current) => (current?.taskId === taskId ? null : current));
+  };
+  const hoverCardLeft =
+    hoveredTaskState && typeof window !== "undefined"
+      ? Math.min(hoveredTaskState.x + 14, Math.max(16, window.innerWidth - 356))
+      : 0;
+  const hoverCardTop =
+    hoveredTaskState && typeof window !== "undefined"
+      ? Math.min(hoveredTaskState.y + 8, Math.max(16, window.innerHeight - 520))
+      : 0;
 
   return (
     <section className="min-h-0 flex-1 overflow-y-auto bg-canvas p-lg dark:bg-surface-dark">
@@ -3648,6 +4116,7 @@ function CalendarWorkspace({
                   {dayEvents.slice(0, 2).map((event) => (
                     <button
                       key={event.id}
+                      data-detail-interactive="true"
                       className="block w-full truncate rounded-md px-xs py-xxs text-left text-caption text-ink transition-colors hover:ring-1 hover:ring-primary dark:text-on-dark"
                       style={{
                         backgroundColor: event.color ? `${event.color}26` : undefined,
@@ -3663,14 +4132,24 @@ function CalendarWorkspace({
                     </button>
                   ))}
                   {dayTasks.slice(0, 3).map((task) => (
-                    <button
-                      key={task.id}
-                      className={cn("block w-full truncate rounded-md px-xs py-xxs text-left text-caption transition-colors hover:ring-1 hover:ring-primary", listToneClass(task.listId, lists, listColorMap, listCustomColorMap, true))}
-                      style={customColorStyle(listCustomColorMap[task.listId], "pill")}
-                      onClick={() => onSelectTask(task.id)}
-                    >
-                      {task.title}
-                    </button>
+                    <div key={task.id} className="relative">
+                      <button
+                        data-detail-interactive="true"
+                        className={cn("block w-full truncate rounded-md px-xs py-xxs text-left text-caption transition-colors hover:ring-1 hover:ring-primary", listToneClass(task.listId, lists, listColorMap, listCustomColorMap, true))}
+                        style={customColorStyle(listCustomColorMap[task.listId], "pill")}
+                        onMouseEnter={(event) => updateTaskHover(task.id, event)}
+                        onMouseMove={(event) => updateTaskHover(task.id, event)}
+                        onMouseLeave={() => clearTaskHover(task.id)}
+                        onFocus={(event) => {
+                          const rect = event.currentTarget.getBoundingClientRect();
+                          setHoveredTaskState({ taskId: task.id, x: rect.right, y: rect.top });
+                        }}
+                        onBlur={() => clearTaskHover(task.id)}
+                        onClick={() => onSelectTask(task.id)}
+                      >
+                        {task.title}
+                      </button>
+                    </div>
                   ))}
                 </div>
               </div>
@@ -3723,8 +4202,12 @@ function CalendarWorkspace({
               unscheduled.map((task) => (
                 <button
                   key={task.id}
+                  data-detail-interactive="true"
                   className={cn("app-focus-ring w-full rounded-xl p-md text-left shadow-subtle transition-all hover:-translate-y-px hover:ring-1 hover:ring-primary", listToneClass(task.listId, lists, listColorMap, listCustomColorMap))}
                   style={customColorStyle(listCustomColorMap[task.listId])}
+                  onMouseEnter={(event) => updateTaskHover(task.id, event)}
+                  onMouseMove={(event) => updateTaskHover(task.id, event)}
+                  onMouseLeave={() => clearTaskHover(task.id)}
                   onClick={() => onSelectTask(task.id)}
                 >
                   {task.title}
@@ -3734,7 +4217,46 @@ function CalendarWorkspace({
           </div>
         </aside>
       </div>
+      {hoveredTask && hoveredTaskState ? (
+        <div
+          className="pointer-events-none fixed z-50"
+          style={{ left: hoverCardLeft, top: hoverCardTop }}
+        >
+          <CalendarTaskHoverCard task={hoveredTask} listName={hoveredTaskListName} language={language} />
+        </div>
+      ) : null}
     </section>
+  );
+}
+
+function CalendarTaskHoverCard({ task, listName, language }: { task: Task; listName: string; language: LanguageMode }) {
+  const completedSubtasks = task.subtasks.filter((subtask) => subtask.completed).length;
+  const notes = task.notes.trim();
+  return (
+    <div className="z-40 max-h-[70vh] w-80 overflow-y-auto rounded-xl border border-hairline bg-canvas p-md text-left shadow-panel dark:border-surface-dark-elevated dark:bg-surface-dark-elevated">
+      <div className="text-title-md text-ink dark:text-on-dark">{task.title}</div>
+      <div className="mt-sm flex flex-wrap gap-xs">
+        <Badge>{listName}</Badge>
+        <Badge>{priorityLabel(taskPriority(task), language)}</Badge>
+        {task.dueText ? <Badge>{displayDueText(task.dueText, language)}</Badge> : null}
+        {task.estimate ? <Badge>{task.estimate}</Badge> : null}
+        {task.reminderTime ? <Badge>{uiText(language, `Reminder ${task.reminderTime}`, `提醒 ${task.reminderTime}`)}</Badge> : null}
+      </div>
+      {notes ? <p className="mt-sm whitespace-pre-wrap text-body-sm text-muted dark:text-on-dark-soft">{notes}</p> : null}
+      {task.subtasks.length > 0 ? (
+        <div className="mt-sm space-y-xs">
+          <div className="text-caption text-muted dark:text-on-dark-soft">
+            {uiText(language, `${completedSubtasks}/${task.subtasks.length} subtasks`, `${completedSubtasks}/${task.subtasks.length} 个子任务`)}
+          </div>
+          {task.subtasks.map((subtask) => (
+            <div key={subtask.id} className="flex items-start gap-xs text-caption text-muted dark:text-on-dark-soft">
+              <CompletionGlyph completed={subtask.completed} />
+              <span className={cn("min-w-0 flex-1", subtask.completed && "line-through")}>{subtask.title}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -4080,28 +4602,120 @@ function ManageListsModal({
 type UtilityWorkspaceProps = {
   title: string;
   description: string;
-  tasks: Task[];
+  items: TaskActivityRecord[];
   emptyText: string;
   language: LanguageMode;
+  selectedTaskId: string;
   onSelectTask: (taskId: string) => void;
 };
 
-function UtilityWorkspace({ title, description, tasks, emptyText, language, onSelectTask }: UtilityWorkspaceProps) {
+function parseActivityDate(value?: string | null) {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  if (/^\d+$/.test(trimmed)) {
+    const numeric = Number(trimmed);
+    const parsed = new Date(trimmed.length > 10 ? numeric : numeric * 1000);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  const parsed = new Date(trimmed);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed;
+  }
+
+  const lower = trimmed.toLowerCase();
+  const now = new Date();
+  const relative = lower.match(/^(\d+)\s*([mhd])\s*ago$/);
+  if (relative) {
+    const amount = Number(relative[1]);
+    const unit = relative[2];
+    const offset = unit === "m" ? amount * 60_000 : unit === "h" ? amount * 3_600_000 : amount * 86_400_000;
+    return new Date(now.getTime() - offset);
+  }
+  if (lower === "just now" || lower === "today") {
+    return now;
+  }
+  if (lower === "yesterday") {
+    return new Date(now.getTime() - 86_400_000);
+  }
+  if (lower === "last week") {
+    return new Date(now.getTime() - 7 * 86_400_000);
+  }
+
+  return null;
+}
+
+function activityTimestampForCompletedTask(task: Task, fallbackIndex: number) {
+  const parsed = parseActivityDate(task.completedAt) ?? parseActivityDate(task.lastEdited) ?? parseActivityDate(task.createdAt);
+  if (parsed) {
+    return parsed.toISOString();
+  }
+  return new Date(Date.now() - (fallbackIndex + 1) * 1000).toISOString();
+}
+
+function formatActivityTime(value: string, language: LanguageMode) {
+  const parsed = parseActivityDate(value);
+  if (!parsed) {
+    return uiText(language, "Unknown time", "时间未知");
+  }
+  return new Intl.DateTimeFormat(language === "zh" ? "zh-CN" : "en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(parsed);
+}
+
+function UtilityWorkspace({ title, description, items, emptyText, language, selectedTaskId, onSelectTask }: UtilityWorkspaceProps) {
   return (
     <section className="min-h-0 flex-1 overflow-y-auto bg-canvas p-lg dark:bg-surface-dark">
       <h1 className="font-display text-display-md text-ink dark:text-on-dark">{uiDictionary[title] && language === "zh" ? uiDictionary[title] : title}</h1>
       <p className="mt-xs text-body-md text-muted">{uiDictionary[description] && language === "zh" ? uiDictionary[description] : description}</p>
       <div className="mt-lg max-w-3xl space-y-sm">
-        {tasks.length === 0 ? (
+        {items.length === 0 ? (
           <EmptyState
             title={uiDictionary[emptyText] && language === "zh" ? uiDictionary[emptyText] : emptyText}
             description={uiText(language, "Nothing to review here right now.", "现在没有需要查看的内容。")}
           />
         ) : (
-          tasks.map((task) => (
-            <button key={task.id} className="flex w-full items-center justify-between rounded-lg border border-hairline bg-surface p-md text-left hover:ring-1 hover:ring-primary dark:border-surface-dark-elevated dark:bg-surface-dark-elevated" onClick={() => onSelectTask(task.id)}>
-              <span className="text-title-md text-ink dark:text-on-dark">{task.title}</span>
-              <CheckCircle2 size={18} className="text-success" />
+          items.map((item) => (
+            <button
+              key={item.id}
+              data-detail-interactive={item.action === "completed" ? "true" : undefined}
+              className={cn(
+                "flex w-full items-start gap-md rounded-lg border border-hairline bg-surface p-md text-left transition-colors dark:border-surface-dark-elevated dark:bg-surface-dark-elevated",
+                item.action === "completed" ? "hover:ring-1 hover:ring-primary" : "cursor-default",
+                selectedTaskId === item.taskId && item.action === "completed" && "ring-2 ring-primary",
+              )}
+              onClick={() => {
+                if (item.action === "completed") {
+                  onSelectTask(item.taskId);
+                }
+              }}
+            >
+              <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center text-muted">
+                {item.action === "completed" ? (
+                  <CompletionGlyph completed />
+                ) : (
+                  <span className="grid h-5 w-5 place-items-center rounded-full bg-error text-on-dark">
+                    <X size={14} />
+                  </span>
+                )}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-title-md text-ink dark:text-on-dark">{item.taskSnapshot.title}</span>
+                <span className="mt-xxs block text-caption text-muted dark:text-on-dark-soft">
+                  {item.action === "completed"
+                    ? uiText(language, "Completed", "已完成")
+                    : uiText(language, "Deleted", "已删除")}
+                  {" · "}
+                  {formatActivityTime(item.operatedAt, language)}
+                </span>
+              </span>
             </button>
           ))
         )}

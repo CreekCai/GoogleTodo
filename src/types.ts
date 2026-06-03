@@ -44,6 +44,7 @@ export type Task = {
   priority?: TaskPriority;
   recurrence?: TaskRecurrence;
   completed: boolean;
+  completedAt?: string;
   createdAt: string;
   lastEdited: string;
   subtasks: Subtask[];

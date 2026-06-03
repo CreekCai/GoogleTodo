@@ -30,6 +30,7 @@ export type GoogleTaskDto = {
   parent?: string | null;
   position?: string | null;
   completed: boolean;
+  completed_at?: string | null;
 };
 
 export type GoogleCalendarEventDto = {

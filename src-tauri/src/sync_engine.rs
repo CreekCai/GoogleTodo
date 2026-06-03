@@ -349,6 +349,7 @@ fn migrate(conn: &Connection) -> Result<(), String> {
           parent TEXT,
           position TEXT,
           completed INTEGER NOT NULL,
+          completed_at TEXT,
           raw_json TEXT NOT NULL,
           updated_at TEXT NOT NULL,
           last_synced_at TEXT
@@ -372,7 +373,10 @@ fn migrate(conn: &Connection) -> Result<(), String> {
         );
         "#,
     )
-    .map_err(to_message)
+    .map_err(to_message)?;
+
+    let _ = conn.execute("ALTER TABLE tasks ADD COLUMN completed_at TEXT", []);
+    Ok(())
 }
 
 fn read_cached_snapshot(conn: &Connection, offline: bool) -> Result<CachedSnapshot, String> {
@@ -411,7 +415,7 @@ fn read_task_lists(conn: &Connection) -> Result<Vec<GoogleTaskListDto>, String> 
 fn read_tasks(conn: &Connection) -> Result<Vec<GoogleTaskDto>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT id, task_list_id, title, notes, due, status, parent, position, completed
+            "SELECT id, task_list_id, title, notes, due, status, parent, position, completed, completed_at
              FROM tasks
              ORDER BY task_list_id, position, updated_at",
         )
@@ -429,6 +433,7 @@ fn read_tasks(conn: &Connection) -> Result<Vec<GoogleTaskDto>, String> {
                 parent: row.get(6)?,
                 position: row.get(7)?,
                 completed: completed == 1,
+                completed_at: row.get(9)?,
             })
         })
         .map_err(to_message)?;
@@ -485,8 +490,8 @@ fn upsert_task(conn: &Connection, task: &GoogleTaskDto) -> Result<(), String> {
     let raw_json = serde_json::to_string(task).map_err(to_message)?;
     conn.execute(
         "INSERT INTO tasks
-         (id, task_list_id, title, notes, due, status, parent, position, completed, raw_json, updated_at, last_synced_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?11)
+         (id, task_list_id, title, notes, due, status, parent, position, completed, completed_at, raw_json, updated_at, last_synced_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?12)
          ON CONFLICT(id) DO UPDATE SET
            task_list_id = excluded.task_list_id,
            title = excluded.title,
@@ -496,6 +501,7 @@ fn upsert_task(conn: &Connection, task: &GoogleTaskDto) -> Result<(), String> {
            parent = excluded.parent,
            position = excluded.position,
            completed = excluded.completed,
+           completed_at = excluded.completed_at,
            raw_json = excluded.raw_json,
            updated_at = excluded.updated_at,
            last_synced_at = excluded.last_synced_at",
@@ -509,6 +515,7 @@ fn upsert_task(conn: &Connection, task: &GoogleTaskDto) -> Result<(), String> {
             task.parent,
             task.position,
             if task.completed { 1 } else { 0 },
+            task.completed_at,
             raw_json,
             now_string()
         ],
@@ -519,7 +526,7 @@ fn upsert_task(conn: &Connection, task: &GoogleTaskDto) -> Result<(), String> {
 
 fn read_task(conn: &Connection, task_id: &str) -> Result<Option<GoogleTaskDto>, String> {
     conn.query_row(
-        "SELECT id, task_list_id, title, notes, due, status, parent, position, completed
+        "SELECT id, task_list_id, title, notes, due, status, parent, position, completed, completed_at
          FROM tasks WHERE id = ?1",
         params![task_id],
         |row| {
@@ -534,6 +541,7 @@ fn read_task(conn: &Connection, task_id: &str) -> Result<Option<GoogleTaskDto>, 
                 parent: row.get(6)?,
                 position: row.get(7)?,
                 completed: completed == 1,
+                completed_at: row.get(9)?,
             })
         },
     )
@@ -556,6 +564,11 @@ fn update_cached_task(conn: &Connection, input: &UpdateTaskInput) -> Result<Goog
     if let Some(status) = input.status.as_deref() {
         task.status = status.to_string();
         task.completed = status == "completed";
+        task.completed_at = if task.completed {
+            Some(now_string())
+        } else {
+            None
+        };
     }
     upsert_task(conn, &task)?;
     Ok(task)
@@ -654,6 +667,7 @@ fn local_task_from_create(input: &CreateTaskInput) -> GoogleTaskDto {
         parent: input.parent.clone(),
         position: None,
         completed: false,
+        completed_at: None,
     }
 }
 
@@ -750,6 +764,7 @@ mod tests {
                 parent: None,
                 position: None,
                 completed: false,
+                completed_at: None,
             },
         )
         .expect("写入任务失败");
