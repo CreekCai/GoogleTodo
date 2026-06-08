@@ -46,6 +46,8 @@ jobs:
           prerelease: false
           includeUpdaterJson: true
           updaterJsonPreferNsis: true
+          retryAttempts: 3
+          args: --bundles nsis
 
       - name: Publish updater manifest
         if: startsWith(github.ref, 'refs/tags/')
