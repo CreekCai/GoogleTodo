@@ -1,5 +1,6 @@
 ﻿import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRef } from "react";
+import { startTransition } from "react";
 import type { CSSProperties } from "react";
 import {
   Archive,
@@ -1315,26 +1316,28 @@ export default function App() {
       ? targetListId
       : nextLists[0]?.id ?? "";
 
-    setLists(nextLists);
-    setListColorMap((current) => ({
-      ...Object.fromEntries(nextLists.map((list, index) => [list.id, current[list.id] ?? index])),
-    }));
-    setTasks(nextTasks);
-    setUsingGoogleData(true);
-    setActiveListId(nextActiveListId);
-    setSelectedTaskId((current) =>
-      preferredTaskId && nextTasks.some((task) => task.id === preferredTaskId)
-        ? preferredTaskId
-        : nextTasks.some((task) => task.id === current)
-        ? current
-        : "",
-    );
-    setLastSyncedAt(snapshot.last_synced_at ?? null);
-    setPendingCount(snapshot.pending_count);
-    setOfflineMode(snapshot.offline);
-    if (message) {
-      setSyncMessage(message);
-    }
+    startTransition(() => {
+      setLists(nextLists);
+      setListColorMap((current) => ({
+        ...Object.fromEntries(nextLists.map((list, index) => [list.id, current[list.id] ?? index])),
+      }));
+      setTasks(nextTasks);
+      setUsingGoogleData(true);
+      setActiveListId(nextActiveListId);
+      setSelectedTaskId((current) =>
+        preferredTaskId && nextTasks.some((task) => task.id === preferredTaskId)
+          ? preferredTaskId
+          : nextTasks.some((task) => task.id === current)
+          ? current
+          : "",
+      );
+      setLastSyncedAt(snapshot.last_synced_at ?? null);
+      setPendingCount(snapshot.pending_count);
+      setOfflineMode(snapshot.offline);
+      if (message) {
+        setSyncMessage(message);
+      }
+    });
   };
 
   const applySyncResult = (result: SyncResult, preferredListId?: string) => {
@@ -1345,24 +1348,26 @@ export default function App() {
         ? preferredListId
         : nextLists[0]?.id ?? "";
 
-    if (nextLists.length > 0 || nextTasks.length > 0) {
-      setLists(nextLists);
-      setListColorMap((current) => ({
-        ...Object.fromEntries(nextLists.map((list, index) => [list.id, current[list.id] ?? index])),
-      }));
-      setTasks(nextTasks);
-      setUsingGoogleData(true);
-      setActiveListId(nextActiveListId);
-      setSelectedTaskId((current) => (nextTasks.some((task) => task.id === current) ? current : ""));
-    }
+    startTransition(() => {
+      if (nextLists.length > 0 || nextTasks.length > 0) {
+        setLists(nextLists);
+        setListColorMap((current) => ({
+          ...Object.fromEntries(nextLists.map((list, index) => [list.id, current[list.id] ?? index])),
+        }));
+        setTasks(nextTasks);
+        setUsingGoogleData(true);
+        setActiveListId(nextActiveListId);
+        setSelectedTaskId((current) => (nextTasks.some((task) => task.id === current) ? current : ""));
+      }
 
-    setLastSyncedAt(result.snapshot.last_synced_at ?? null);
-    setPendingCount(result.snapshot.pending_count);
-    setOfflineMode(result.status === "offline" || result.snapshot.offline);
-    setSyncMessage(result.message);
-    if (result.status !== "ok") {
-      setLastGoogleError(result.message);
-    }
+      setLastSyncedAt(result.snapshot.last_synced_at ?? null);
+      setPendingCount(result.snapshot.pending_count);
+      setOfflineMode(result.status === "offline" || result.snapshot.offline);
+      setSyncMessage(result.message);
+      if (result.status !== "ok") {
+        setLastGoogleError(result.message);
+      }
+    });
   };
 
   const refreshGoogleData = async (preferredListId?: string) => {
@@ -1389,7 +1394,9 @@ export default function App() {
 
     try {
       const remoteEvents = await googleTasksApi.calendarEvents(monthValue, selectedCalendarIdsRef.current);
-      setCalendarEvents(remoteEvents);
+      startTransition(() => {
+        setCalendarEvents(remoteEvents);
+      });
     } catch (error) {
       const message = String(error);
       if (message.includes("403")) {
@@ -1432,6 +1439,7 @@ export default function App() {
 
   const refreshGoogleWorkspaceData = async (preferredListId?: string) => {
     if (syncLoopBusyRef.current) {
+      setSyncMessage(uiText(languageRef.current, "Sync already running in the background", "后台同步正在进行中"));
       return;
     }
 
@@ -1687,7 +1695,7 @@ export default function App() {
 
       const loginStatus = await googleTasksApi.login(clientIdOverride, clientSecretOverride);
       setAuthStatus(loginStatus);
-      await refreshGoogleWorkspaceData();
+      void refreshGoogleWorkspaceData();
     } catch (error) {
       const message = `登录失败：${String(error)}`;
       setSyncMessage(message);
@@ -1806,9 +1814,7 @@ export default function App() {
       const [mapped] = mapGoogleTasks([remote], taskPriorityMap);
       updateTask(taskId, { ...mapped, subtasks: task.subtasks, reminderTime: mapped.reminderTime });
       setSyncMessage(
-        remote.id.startsWith("local-")
-          ? uiText(language, "Saved to local cache", "已保存到本地缓存")
-          : uiText(language, "Synced to Google Tasks", "已同步到 Google Tasks"),
+        uiText(language, "Saved locally. Background sync is running.", "已保存到本地，后台同步中。"),
       );
       return true;
     } catch (error) {
@@ -1840,11 +1846,9 @@ export default function App() {
 
     if (saved) {
       setSaveState("saved");
-      setSelectedTaskId("");
+      void refreshGoogleWorkspaceData(activeListIdRef.current);
       setSaveMessage(
-        offlineMode
-          ? uiText(language, "Saved to offline queue", "已保存到离线队列")
-          : uiText(language, "Synced to Google Tasks", "已同步到 Google Tasks"),
+        uiText(language, "Saved locally. Syncing in the background.", "已保存到本地，正在后台同步。"),
       );
       window.setTimeout(() => {
         setSaveState("idle");
@@ -1927,11 +1931,9 @@ export default function App() {
     const saved = await persistGoogleTaskUpdate(taskId, patch);
     if (saved) {
       setSaveState("saved");
-      setSelectedTaskId((current) => (current === taskId ? "" : current));
+      void refreshGoogleWorkspaceData(activeListIdRef.current);
       setSaveMessage(
-        offlineMode
-          ? uiText(language, "Saved to offline queue", "已保存到离线队列")
-          : uiText(language, "Synced to Google Tasks", "已同步到 Google Tasks"),
+        uiText(language, "Saved locally. Syncing in the background.", "已保存到本地，正在后台同步。"),
       );
       window.setTimeout(() => {
         setSaveState("idle");
@@ -1961,12 +1963,9 @@ export default function App() {
         });
         const [newTask] = mapGoogleTasks([remoteTask], taskPriorityMap);
         setTasks((current) => [newTask, ...current]);
-        setPendingCount((current) => current + (remoteTask.id.startsWith("local-") ? 1 : 0));
-        setSyncMessage(
-          remoteTask.id.startsWith("local-")
-            ? uiText(language, "Saved offline and waiting to sync", "已离线保存，等待同步")
-            : uiText(language, "Created in Google Tasks", "已创建到 Google Tasks"),
-        );
+        setPendingCount((current) => current + 1);
+        setSyncMessage(uiText(language, "Saved locally. Syncing in the background.", "已保存到本地，正在后台同步。"));
+        void refreshGoogleWorkspaceData(listId);
       } catch (error) {
         const message = `${uiText(language, "Create failed: ", "创建失败：")}${String(error)}`;
         setSyncMessage(message);
@@ -2019,12 +2018,9 @@ export default function App() {
         setActiveSmartView(null);
         setActiveView("list");
         setQuickDraft(createDefaultQuickDraft(newTask.listId));
-        setPendingCount((current) => current + (remoteTask.id.startsWith("local-") ? 1 : 0));
-        setSyncMessage(
-          remoteTask.id.startsWith("local-")
-            ? uiText(language, "Quick task saved offline", "快捷任务已离线保存")
-            : uiText(language, "Quick task created in Google Tasks", "快捷任务已创建到 Google Tasks"),
-        );
+        setPendingCount((current) => current + 1);
+        setSyncMessage(uiText(language, "Saved locally. Syncing in the background.", "已保存到本地，正在后台同步。"));
+        void refreshGoogleWorkspaceData(newTask.listId);
       } catch (error) {
         const message = `${uiText(language, "Create failed: ", "创建失败：")}${String(error)}`;
         setSyncMessage(message);
@@ -2075,14 +2071,11 @@ export default function App() {
             ...selectedTask.subtasks,
             { id: remoteSubtask.id, title: remoteSubtask.title, completed: remoteSubtask.completed },
           ],
-          lastEdited: remoteSubtask.id.startsWith("local-") ? "pending sync" : "just now",
+          lastEdited: "pending sync",
         });
-        setPendingCount((current) => current + (remoteSubtask.id.startsWith("local-") ? 1 : 0));
-        setSyncMessage(
-          remoteSubtask.id.startsWith("local-")
-            ? uiText(language, "Subtask saved offline", "子任务已离线保存")
-            : uiText(language, "Subtask created in Google Tasks", "子任务已创建到 Google Tasks"),
-        );
+        setPendingCount((current) => current + 1);
+        setSyncMessage(uiText(language, "Saved locally. Syncing in the background.", "已保存到本地，正在后台同步。"));
+        void refreshGoogleWorkspaceData(selectedTask.listId);
       } catch (error) {
         const message = `${uiText(language, "Create failed: ", "创建失败：")}${String(error)}`;
         setSyncMessage(message);
@@ -2143,7 +2136,8 @@ export default function App() {
           task_id: subtaskId,
           status: completed ? "completed" : "needsAction",
         });
-        setSyncMessage(uiText(language, "Subtask status updated", "子任务状态已更新"));
+        setSyncMessage(uiText(language, "Saved locally. Syncing in the background.", "已保存到本地，正在后台同步。"));
+        void refreshGoogleWorkspaceData(task.listId);
       } catch (error) {
         const message = `${uiText(language, "Status update failed: ", "状态更新失败：")}${String(error)}`;
         setSyncMessage(message);
@@ -2178,7 +2172,8 @@ export default function App() {
         task_id: subtask.id,
         title: titleOverride ?? subtask.title,
       });
-      setSyncMessage(uiText(language, "Subtask updated", "子任务已更新"));
+      setSyncMessage(uiText(language, "Saved locally. Syncing in the background.", "已保存到本地，正在后台同步。"));
+      void refreshGoogleWorkspaceData(selectedTask.listId);
     } catch (error) {
       const message = `${uiText(language, "Subtask save failed: ", "子任务保存失败：")}${String(error)}`;
       setSyncMessage(message);
@@ -2193,7 +2188,8 @@ export default function App() {
     if (googleReady) {
       try {
         await syncApi.deleteTask(selectedTask.listId, selectedTask.id);
-        setSyncMessage(uiText(language, "Task deleted", "任务已删除"));
+        setSyncMessage(uiText(language, "Deleted locally. Syncing in the background.", "已在本地删除，正在后台同步。"));
+        void refreshGoogleWorkspaceData(selectedTask.listId);
       } catch (error) {
         const message = `${uiText(language, "Delete failed: ", "删除失败：")}${String(error)}`;
         setSyncMessage(message);
@@ -2334,7 +2330,8 @@ export default function App() {
           task_id: task.id,
           previous: direction > 0 ? swapWithId : null,
         });
-        setSyncMessage(uiText(language, "Task order updated", "任务顺序已更新"));
+        setSyncMessage(uiText(language, "Saved locally. Syncing in the background.", "已保存到本地，正在后台同步。"));
+        void refreshGoogleWorkspaceData(task.listId);
       } catch (error) {
         const message = `${uiText(language, "Reorder failed: ", "排序失败：")}${String(error)}`;
         setSyncMessage(message);
@@ -2387,10 +2384,11 @@ export default function App() {
         const snapshot = await syncApi.cachedSnapshot();
         applySnapshot(
           snapshot,
-          uiText(language, "Task moved to another list", "任务已移动到新的清单"),
+          uiText(language, "Saved locally. Syncing in the background.", "已保存到本地，正在后台同步。"),
           listId,
         );
         setActiveSmartView(null);
+        void refreshGoogleWorkspaceData(listId);
         return;
       } catch (error) {
         const message = `${uiText(language, "Move failed: ", "移动失败：")}${String(error)}`;
@@ -3396,8 +3394,6 @@ function TaskDetailsPanel({
 }: TaskDetailsPanelProps) {
   const titleRef = useRef<HTMLTextAreaElement | null>(null);
   const notesRef = useRef<HTMLTextAreaElement | null>(null);
-  const lastPersistedSignatureRef = useRef("");
-  const lastTaskIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     const autosize = (element: HTMLTextAreaElement | null) => {
@@ -3411,62 +3407,6 @@ function TaskDetailsPanel({
     autosize(titleRef.current);
     autosize(notesRef.current);
   }, [task?.id, task?.title, task?.notes]);
-
-  useEffect(() => {
-    if (!task) {
-      lastPersistedSignatureRef.current = "";
-      lastTaskIdRef.current = null;
-      return;
-    }
-
-    const signature = JSON.stringify({
-      id: task.id,
-      title: task.title,
-      notes: task.notes,
-      dueText: task.dueText ?? "",
-      dueLabel: task.dueLabel ?? "",
-      reminderTime: task.reminderTime ?? "",
-      completed: task.completed,
-    });
-
-    if (lastTaskIdRef.current !== task.id) {
-      lastTaskIdRef.current = task.id;
-      lastPersistedSignatureRef.current = signature;
-      return;
-    }
-
-    if (lastPersistedSignatureRef.current === "") {
-      lastPersistedSignatureRef.current = signature;
-      return;
-    }
-
-    if (lastPersistedSignatureRef.current === signature) {
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      lastPersistedSignatureRef.current = signature;
-      onPersistTask(task.id, {
-        title: task.title,
-        notes: task.notes,
-        dueText: task.dueText,
-        dueLabel: task.dueLabel,
-        reminderTime: task.reminderTime,
-        completed: task.completed,
-      });
-    }, 550);
-
-    return () => window.clearTimeout(timer);
-  }, [
-    onPersistTask,
-    task?.completed,
-    task?.dueLabel,
-    task?.dueText,
-    task?.id,
-    task?.notes,
-    task?.reminderTime,
-    task?.title,
-  ]);
 
   if (!task) {
     return (
@@ -3506,6 +3446,7 @@ function TaskDetailsPanel({
             const title = event.target.value;
             onUpdateTask(task.id, { title, lastEdited: "just now" });
           }}
+          onBlur={(event) => onPersistTask(task.id, { title: event.currentTarget.value })}
           placeholder={uiText(language, "Task title", "任务标题")}
         />
         <textarea
@@ -3517,6 +3458,7 @@ function TaskDetailsPanel({
             const notes = event.target.value;
             onUpdateTask(task.id, { notes, lastEdited: "just now" });
           }}
+          onBlur={(event) => onPersistTask(task.id, { notes: event.currentTarget.value })}
           placeholder={uiText(language, "Notes", "备注")}
         />
 
@@ -3543,7 +3485,9 @@ function TaskDetailsPanel({
               value={inputDateValue(task)}
               onChange={(event) => {
                 const value = event.target.value;
-                onUpdateTask(task.id, { dueText: value || undefined, dueLabel: dueLabelFromDate(value), lastEdited: "just now" });
+                const patch = { dueText: value || undefined, dueLabel: dueLabelFromDate(value), lastEdited: "just now" };
+                onUpdateTask(task.id, patch);
+                onPersistTask(task.id, patch);
               }}
             />
             </div>
@@ -3556,16 +3500,22 @@ function TaskDetailsPanel({
                     className="w-[88px] border-none bg-transparent p-0 text-caption text-on-dark outline-none [color-scheme:dark] focus:ring-0"
                     value={task.reminderTime}
                     onChange={(event) => {
-                      onUpdateTask(task.id, {
+                      const patch = {
                         reminderTime: event.target.value || undefined,
                         lastEdited: "just now",
-                      });
+                      };
+                      onUpdateTask(task.id, patch);
+                      onPersistTask(task.id, patch);
                     }}
                     title={uiText(language, "Reminder time", "提醒时间")}
                   />
                   <button
                     className="grid h-5 w-5 place-items-center rounded transition-colors hover:bg-white/10"
-                    onClick={() => onUpdateTask(task.id, { reminderTime: undefined, lastEdited: "just now" })}
+                    onClick={() => {
+                      const patch = { reminderTime: undefined, lastEdited: "just now" };
+                      onUpdateTask(task.id, patch);
+                      onPersistTask(task.id, patch);
+                    }}
                     title={uiText(language, "Disable reminder time", "关闭提醒时间")}
                   >
                     <X size={13} />
@@ -3574,7 +3524,11 @@ function TaskDetailsPanel({
               ) : (
                 <Button
                   variant="secondary"
-                  onClick={() => onUpdateTask(task.id, { reminderTime: "09:00", lastEdited: "just now" })}
+                  onClick={() => {
+                    const patch = { reminderTime: "09:00", lastEdited: "just now" };
+                    onUpdateTask(task.id, patch);
+                    onPersistTask(task.id, patch);
+                  }}
                 >
                   <Clock3 size={16} />
                   {uiText(language, "Add time", "添加时间")}
@@ -3585,7 +3539,9 @@ function TaskDetailsPanel({
               <Button
                 variant="secondary"
                 onClick={() => {
-                  onUpdateTask(task.id, { dueText: "Today", dueLabel: "today", lastEdited: "just now" });
+                  const patch = { dueText: "Today", dueLabel: "today" as SmartView, lastEdited: "just now" };
+                  onUpdateTask(task.id, patch);
+                  onPersistTask(task.id, patch);
                 }}
               >
                 {uiText(language, "Today", "今日")}
@@ -3593,7 +3549,9 @@ function TaskDetailsPanel({
               <Button
                 variant="secondary"
                 onClick={() => {
-                  onUpdateTask(task.id, { dueText: "Tomorrow", dueLabel: "tomorrow", lastEdited: "just now" });
+                  const patch = { dueText: "Tomorrow", dueLabel: "tomorrow" as SmartView, lastEdited: "just now" };
+                  onUpdateTask(task.id, patch);
+                  onPersistTask(task.id, patch);
                 }}
               >
                 {uiText(language, "Tomorrow", "明日")}
@@ -3602,7 +3560,9 @@ function TaskDetailsPanel({
                 variant="secondary"
                 onClick={() => {
                   const nextMonday = nextMondayDate();
-                  onUpdateTask(task.id, { dueText: nextMonday, dueLabel: dueLabelFromDate(nextMonday), lastEdited: "just now" });
+                  const patch = { dueText: nextMonday, dueLabel: dueLabelFromDate(nextMonday), lastEdited: "just now" };
+                  onUpdateTask(task.id, patch);
+                  onPersistTask(task.id, patch);
                 }}
               >
                 {uiText(language, "Next Monday", "下周一")}

@@ -504,7 +504,20 @@ pub fn google_tasks(
 }
 
 #[tauri::command]
-pub fn google_calendar_events(
+pub async fn google_calendar_events(
+    app: AppHandle,
+    month: String,
+    calendar_ids: Option<Vec<String>>,
+) -> Result<Vec<GoogleCalendarEventDto>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<GoogleTasksState>();
+        google_calendar_events_blocking(app.clone(), state, month, calendar_ids)
+    })
+    .await
+    .map_err(to_message)?
+}
+
+pub fn google_calendar_events_blocking(
     app: AppHandle,
     state: State<GoogleTasksState>,
     month: String,
@@ -592,7 +605,18 @@ pub fn google_calendar_events(
 }
 
 #[tauri::command]
-pub fn google_calendar_lists(
+pub async fn google_calendar_lists(
+    app: AppHandle,
+) -> Result<Vec<GoogleCalendarListDto>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<GoogleTasksState>();
+        google_calendar_lists_blocking(app.clone(), state)
+    })
+    .await
+    .map_err(to_message)?
+}
+
+pub fn google_calendar_lists_blocking(
     app: AppHandle,
     state: State<GoogleTasksState>,
 ) -> Result<Vec<GoogleCalendarListDto>, String> {
@@ -622,7 +646,19 @@ pub fn google_calendar_lists(
 }
 
 #[tauri::command]
-pub fn google_update_calendar_event(
+pub async fn google_update_calendar_event(
+    app: AppHandle,
+    input: UpdateCalendarEventInput,
+) -> Result<GoogleCalendarEventDto, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<GoogleTasksState>();
+        google_update_calendar_event_blocking(app.clone(), state, input)
+    })
+    .await
+    .map_err(to_message)?
+}
+
+pub fn google_update_calendar_event_blocking(
     app: AppHandle,
     state: State<GoogleTasksState>,
     input: UpdateCalendarEventInput,
@@ -659,7 +695,20 @@ pub fn google_update_calendar_event(
 }
 
 #[tauri::command]
-pub fn google_delete_calendar_event(
+pub async fn google_delete_calendar_event(
+    app: AppHandle,
+    calendar_id: String,
+    event_id: String,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<GoogleTasksState>();
+        google_delete_calendar_event_blocking(app.clone(), state, calendar_id, event_id)
+    })
+    .await
+    .map_err(to_message)?
+}
+
+pub fn google_delete_calendar_event_blocking(
     app: AppHandle,
     state: State<GoogleTasksState>,
     calendar_id: String,

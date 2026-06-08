@@ -45,17 +45,27 @@ struct PendingItem {
 }
 
 #[tauri::command]
-pub fn sync_cached_snapshot(app: AppHandle) -> Result<CachedSnapshot, String> {
+pub async fn sync_cached_snapshot(app: AppHandle) -> Result<CachedSnapshot, String> {
+    tauri::async_runtime::spawn_blocking(move || sync_cached_snapshot_blocking(app))
+        .await
+        .map_err(to_message)?
+}
+
+fn sync_cached_snapshot_blocking(app: AppHandle) -> Result<CachedSnapshot, String> {
     let conn = open_app_database(&app)?;
     read_cached_snapshot(&conn, false)
 }
 
 #[tauri::command]
-pub fn sync_google_now(
-    app: AppHandle,
-    state: State<GoogleTasksState>,
-) -> Result<SyncResult, String> {
+pub async fn sync_google_now(app: AppHandle) -> Result<SyncResult, String> {
+    tauri::async_runtime::spawn_blocking(move || sync_google_now_blocking(app))
+        .await
+        .map_err(to_message)?
+}
+
+fn sync_google_now_blocking(app: AppHandle) -> Result<SyncResult, String> {
     let conn = open_app_database(&app)?;
+    let state = app.state::<GoogleTasksState>();
     match run_full_sync(&app, &conn, &state) {
         Ok(()) => Ok(SyncResult {
             status: "ok".to_string(),
@@ -74,136 +84,112 @@ pub fn sync_google_now(
 }
 
 #[tauri::command]
-pub fn sync_create_task(
+pub async fn sync_create_task(
     app: AppHandle,
-    state: State<GoogleTasksState>,
+    input: CreateTaskInput,
+) -> Result<GoogleTaskDto, String> {
+    tauri::async_runtime::spawn_blocking(move || sync_create_task_blocking(app, input))
+        .await
+        .map_err(to_message)?
+}
+
+fn sync_create_task_blocking(
+    app: AppHandle,
     input: CreateTaskInput,
 ) -> Result<GoogleTaskDto, String> {
     let conn = open_app_database(&app)?;
-    match google_tasks::google_create_task(app.clone(), state, input.clone()) {
-        Ok(task) => {
-            upsert_task(&conn, &task)?;
-            set_meta(&conn, "lastSyncedAt", &now_string())?;
-            Ok(task)
-        }
-        Err(error) if classify_google_error(&error) == "offline" => {
-            let task = local_task_from_create(&input);
-            upsert_task(&conn, &task)?;
-            enqueue_pending(
-                &conn,
-                "create_task",
-                Some(&task.id),
-                &input.task_list_id,
-                None,
-                &serde_json::to_value(input.clone()).map_err(to_message)?,
-            )?;
-            Ok(task)
-        }
-        Err(error) => Err(user_message_for_status(
-            classify_google_error(&error),
-            &error,
-        )),
-    }
+    let task = local_task_from_create(&input);
+    upsert_task(&conn, &task)?;
+    enqueue_pending(
+        &conn,
+        "create_task",
+        Some(&task.id),
+        &input.task_list_id,
+        None,
+        &serde_json::to_value(input.clone()).map_err(to_message)?,
+    )?;
+    Ok(task)
 }
 
 #[tauri::command]
-pub fn sync_update_task(
+pub async fn sync_update_task(
     app: AppHandle,
-    state: State<GoogleTasksState>,
+    input: UpdateTaskInput,
+) -> Result<GoogleTaskDto, String> {
+    tauri::async_runtime::spawn_blocking(move || sync_update_task_blocking(app, input))
+        .await
+        .map_err(to_message)?
+}
+
+fn sync_update_task_blocking(
+    app: AppHandle,
     input: UpdateTaskInput,
 ) -> Result<GoogleTaskDto, String> {
     let conn = open_app_database(&app)?;
-    match google_tasks::google_update_task(app.clone(), state, input.clone()) {
-        Ok(task) => {
-            upsert_task(&conn, &task)?;
-            set_meta(&conn, "lastSyncedAt", &now_string())?;
-            Ok(task)
-        }
-        Err(error) if classify_google_error(&error) == "offline" => {
-            let task = update_cached_task(&conn, &input)?;
-            enqueue_pending(
-                &conn,
-                "update_task",
-                None,
-                &input.task_list_id,
-                Some(&input.task_id),
-                &serde_json::to_value(input.clone()).map_err(to_message)?,
-            )?;
-            Ok(task)
-        }
-        Err(error) => Err(user_message_for_status(
-            classify_google_error(&error),
-            &error,
-        )),
-    }
+    let task = update_cached_task(&conn, &input)?;
+    enqueue_pending(
+        &conn,
+        "update_task",
+        None,
+        &input.task_list_id,
+        Some(&input.task_id),
+        &serde_json::to_value(input.clone()).map_err(to_message)?,
+    )?;
+    Ok(task)
 }
 
 #[tauri::command]
-pub fn sync_delete_task(
+pub async fn sync_delete_task(
     app: AppHandle,
-    state: State<GoogleTasksState>,
+    task_list_id: String,
+    task_id: String,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        sync_delete_task_blocking(app, task_list_id, task_id)
+    })
+    .await
+    .map_err(to_message)?
+}
+
+fn sync_delete_task_blocking(
+    app: AppHandle,
     task_list_id: String,
     task_id: String,
 ) -> Result<(), String> {
     let conn = open_app_database(&app)?;
-    match google_tasks::google_delete_task(
-        app.clone(),
-        state,
-        task_list_id.clone(),
-        task_id.clone(),
-    ) {
-        Ok(()) => delete_cached_task(&conn, &task_id),
-        Err(error) if classify_google_error(&error) == "offline" => {
-            delete_cached_task(&conn, &task_id)?;
-            enqueue_pending(
-                &conn,
-                "delete_task",
-                None,
-                &task_list_id,
-                Some(&task_id),
-                &Value::Null,
-            )
-        }
-        Err(error) => Err(user_message_for_status(
-            classify_google_error(&error),
-            &error,
-        )),
-    }
+    delete_cached_task(&conn, &task_id)?;
+    enqueue_pending(
+        &conn,
+        "delete_task",
+        None,
+        &task_list_id,
+        Some(&task_id),
+        &Value::Null,
+    )
 }
 
 #[tauri::command]
-pub fn sync_move_task(
+pub async fn sync_move_task(
     app: AppHandle,
-    state: State<GoogleTasksState>,
     input: MoveTaskInput,
 ) -> Result<GoogleTaskDto, String> {
-    let conn = open_app_database(&app)?;
-    match google_tasks::google_move_task(app.clone(), state, input.clone()) {
-        Ok(task) => {
-            upsert_task(&conn, &task)?;
-            set_meta(&conn, "lastSyncedAt", &now_string())?;
-            Ok(task)
-        }
-        Err(error) if classify_google_error(&error) == "offline" => {
-            let task = read_task(&conn, &input.task_id)?
-                .ok_or_else(|| "本地缓存中没有找到要移动的任务".to_string())?;
-            enqueue_pending(
-                &conn,
-                "move_task",
-                None,
-                &input.task_list_id,
-                Some(&input.task_id),
-                &serde_json::to_value(input.clone()).map_err(to_message)?,
-            )?;
-            Ok(task)
-        }
-        Err(error) => Err(user_message_for_status(
-            classify_google_error(&error),
-            &error,
-        )),
-    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let conn = open_app_database(&app)?;
+        let task = read_task(&conn, &input.task_id)?
+            .ok_or_else(|| "Local cached task not found for move".to_string())?;
+        enqueue_pending(
+            &conn,
+            "move_task",
+            None,
+            &input.task_list_id,
+            Some(&input.task_id),
+            &serde_json::to_value(input.clone()).map_err(to_message)?,
+        )?;
+        Ok(task)
+    })
+    .await
+    .map_err(to_message)?
 }
-
 fn run_full_sync(
     app: &AppHandle,
     conn: &Connection,
