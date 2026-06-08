@@ -1,0 +1,19 @@
+{
+  "version": "0.1.17",
+  "notes": "See the assets to download this version and install.",
+  "pub_date": "2026-06-08T04:24:25.498Z",
+  "platforms": {
+    "windows-x86_64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTSEhiM0NqWUFjTlhKc0lZbks1T20vWlRuZHdibEFOeE5jQjJ2eW85T08yS2pSMSs1TmFpTThmcm5walBBMzRCV0FVRzZyZVR2VmhCcktSdnlrTzVJUHpvNmw0VXlVcFFvPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgwODkyNjYxCWZpbGU6R29vZ2xlIFRvZG9fMC4xLjE3X3g2NC1zZXR1cC5leGUKUVJBWUhHM092Ym9sWWV6eHJLTkNScnUwNlZZRHFjWDVnOURUemNEaElxODJVcW50NTBIVjVzc1dEV0tybG53QzduemlqYjVOWERJMzczYUdWNjF4Q0E9PQo=",
+      "url": "https://github.com/CreekCai/GoogleTodo/releases/download/v0.1.17/Google.Todo_0.1.17_x64-setup.exe"
+    },
+    "windows-x86_64-nsis": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTSEhiM0NqWUFjTlhKc0lZbks1T20vWlRuZHdibEFOeE5jQjJ2eW85T08yS2pSMSs1TmFpTThmcm5walBBMzRCV0FVRzZyZVR2VmhCcktSdnlrTzVJUHpvNmw0VXlVcFFvPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgwODkyNjYxCWZpbGU6R29vZ2xlIFRvZG9fMC4xLjE3X3g2NC1zZXR1cC5leGUKUVJBWUhHM092Ym9sWWV6eHJLTkNScnUwNlZZRHFjWDVnOURUemNEaElxODJVcW50NTBIVjVzc1dEV0tybG53QzduemlqYjVOWERJMzczYUdWNjF4Q0E9PQo=",
+      "url": "https://github.com/CreekCai/GoogleTodo/releases/download/v0.1.17/Google.Todo_0.1.17_x64-setup.exe"
+    },
+    "windows-x86_64-msi": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTSEhiM0NqWUFjTlFqdzBPYXlVVjlrUWhTRWYzNGZqaWtDWTBqWkUrbE82M3NUMDN5THpuUE5HRkF2ZXpVRmdEZXdjVUU3SFArSTVYT1pnUUdqb1NBamhxaGM1WExqeVFJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgwODkyNjYxCWZpbGU6R29vZ2xlIFRvZG9fMC4xLjE3X3g2NF9lbi1VUy5tc2kKSG1YVDhmL0dIOXpQYjB6dWd0OWk0V3VGSTR6eTlxdE5jdkxsR3lWaFNIbmQvbHpHZDJJVXB5SC9wY1cvcyt2dzg2YXcyOEtrcGlYM0MwRjNNMzB0RGc9PQo=",
+      "url": "https://github.com/CreekCai/GoogleTodo/releases/download/v0.1.17/Google.Todo_0.1.17_x64_en-US.msi"
+    }
+  }
+}

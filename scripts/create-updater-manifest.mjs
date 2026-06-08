@@ -25,7 +25,7 @@ const manifest = {
   platforms: {
     "windows-x86_64": {
       signature,
-      url: `https://github.com/${repo}/releases/latest/download/${encodeURIComponent(
+      url: `https://github.com/${repo}/releases/download/v${version}/${encodeURIComponent(
         artifactName,
       )}`,
     },
