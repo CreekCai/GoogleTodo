@@ -52,6 +52,8 @@ jobs:
       - name: Publish updater manifest
         if: startsWith(github.ref, 'refs/tags/')
         shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $headers = @{
             Authorization = "Bearer $env:GITHUB_TOKEN"
