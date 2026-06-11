@@ -433,19 +433,16 @@ pub fn google_sign_out(
     app: AppHandle,
     state: State<GoogleTasksState>,
 ) -> Result<AuthStatus, String> {
-    match refresh_token_entry()?.delete_credential() {
-        Ok(()) | Err(keyring::Error::NoEntry) => {}
-        Err(error) => return Err(to_message(error)),
-    }
-    match user_profile_entry()?.delete_credential() {
-        Ok(()) | Err(keyring::Error::NoEntry) => {}
-        Err(error) => return Err(to_message(error)),
-    }
+    clear_google_auth(&app, &state, true)?;
+    google_auth_status(app)
+}
 
-    let mut auth = state.auth.lock().map_err(to_message)?;
-    auth.access_token = None;
-    auth.expires_at = None;
-    clear_stored_auth_state(&app)?;
+#[tauri::command]
+pub fn google_forget_invalid_auth(
+    app: AppHandle,
+    state: State<GoogleTasksState>,
+) -> Result<AuthStatus, String> {
+    clear_google_auth(&app, &state, true)?;
     google_auth_status(app)
 }
 
@@ -1022,10 +1019,48 @@ fn access_token(app: &AppHandle, state: &State<GoogleTasksState>) -> Result<Stri
     let client_secret = client_secret()?;
     let refresh_token = read_refresh_token(app)?;
     let client = http_client()?;
-    let token = refresh_access_token(&client, &client_id, &client_secret, &refresh_token)?;
+    let token = match refresh_access_token(&client, &client_id, &client_secret, &refresh_token) {
+        Ok(token) => token,
+        Err(error) => {
+            if is_invalid_grant_error(&error) {
+                let _ = clear_google_auth(app, state, true);
+                return Err(format!(
+                    "Google authorization expired or was revoked. Please sign in again. Details: {error}"
+                ));
+            }
+            return Err(error);
+        }
+    };
     let access_token = token.access_token.clone();
     update_access_cache(state, token.access_token, token.expires_in)?;
     Ok(access_token)
+}
+
+fn clear_google_auth(
+    app: &AppHandle,
+    state: &State<GoogleTasksState>,
+    clear_profile: bool,
+) -> Result<(), String> {
+    match refresh_token_entry()?.delete_credential() {
+        Ok(()) | Err(keyring::Error::NoEntry) => {}
+        Err(error) => return Err(to_message(error)),
+    }
+    if clear_profile {
+        match user_profile_entry()?.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => {}
+            Err(error) => return Err(to_message(error)),
+        }
+    }
+
+    let mut auth = state.auth.lock().map_err(to_message)?;
+    auth.access_token = None;
+    auth.expires_at = None;
+    clear_stored_auth_state(app)
+}
+
+fn is_invalid_grant_error(error: &str) -> bool {
+    let lower = error.to_lowercase();
+    lower.contains("invalid_grant") || lower.contains("token has been expired or revoked")
 }
 
 fn update_access_cache(

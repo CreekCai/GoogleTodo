@@ -1367,7 +1367,48 @@ export default function App() {
       if (result.status !== "ok") {
         setLastGoogleError(result.message);
       }
+      if (result.status === "auth_required") {
+        void handleInvalidGoogleAuth(result.message);
+      }
     });
+  };
+
+  const isInvalidGoogleAuthError = (error: unknown) => {
+    const message = String(error).toLowerCase();
+    return (
+      message.includes("invalid_grant") ||
+      message.includes("expired or revoked") ||
+      message.includes("authorization expired")
+    );
+  };
+
+  const handleInvalidGoogleAuth = async (error: unknown) => {
+    if (!isInvalidGoogleAuthError(error)) {
+      return false;
+    }
+
+    const message = uiText(
+      languageRef.current,
+      "Google authorization expired or was revoked. Please sign in again.",
+      "Google 授权已过期或已被撤销，请重新登录。",
+    );
+
+    try {
+      const status = await googleTasksApi.forgetInvalidAuth();
+      setAuthStatus(status);
+    } catch {
+      setAuthStatus((current) =>
+        current ? { ...current, signed_in: false } : { configured: true, signed_in: false },
+      );
+    }
+
+    setGoogleSyncing(false);
+    setCalendarEvents([]);
+    setCalendarLists([]);
+    setCalendarListMessage(message);
+    setSyncMessage(message);
+    setLastGoogleError(`${message} ${String(error)}`);
+    return true;
   };
 
   const refreshGoogleData = async (preferredListId?: string) => {
@@ -1378,6 +1419,9 @@ export default function App() {
       const result = await syncApi.syncNow();
       applySyncResult(result, preferredListId);
     } catch (error) {
+      if (await handleInvalidGoogleAuth(error)) {
+        return;
+      }
       const message = `${uiText(language, "Sync failed: ", "同步失败：")}${String(error)}`;
       setSyncMessage(message);
       setLastGoogleError(message);
@@ -1398,6 +1442,9 @@ export default function App() {
         setCalendarEvents(remoteEvents);
       });
     } catch (error) {
+      if (await handleInvalidGoogleAuth(error)) {
+        return;
+      }
       const message = String(error);
       if (message.includes("403")) {
         setSyncMessage(
@@ -1429,6 +1476,9 @@ export default function App() {
           : uiText(languageRef.current, "No calendars returned from Google", "Google 未返回可同步的日历"),
       );
     } catch (error) {
+      if (await handleInvalidGoogleAuth(error)) {
+        return;
+      }
       const message = `${uiText(languageRef.current, "Failed to load calendars: ", "加载日历清单失败：")}${String(error)}`;
       setCalendarListMessage(message);
       setLastGoogleError(message);

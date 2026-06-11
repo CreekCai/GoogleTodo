@@ -109,6 +109,7 @@ pub fn run() {
             google_tasks::google_save_client_credentials,
             google_tasks::google_oauth_login,
             google_tasks::google_sign_out,
+            google_tasks::google_forget_invalid_auth,
             google_tasks::google_task_lists,
             google_tasks::google_tasks,
             google_tasks::google_calendar_lists,

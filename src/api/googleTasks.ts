@@ -100,6 +100,7 @@ export const googleTasksApi = {
   login: (clientIdOverride?: string, clientSecretOverride?: string) =>
     invoke<AuthStatus>("google_oauth_login", { clientIdOverride, clientSecretOverride }),
   signOut: () => invoke<AuthStatus>("google_sign_out"),
+  forgetInvalidAuth: () => invoke<AuthStatus>("google_forget_invalid_auth"),
   taskLists: () => invoke<GoogleTaskListDto[]>("google_task_lists"),
   tasks: (taskListId: string) => invoke<GoogleTaskDto[]>("google_tasks", { taskListId }),
   calendarLists: () => invoke<GoogleCalendarListDto[]>("google_calendar_lists"),
