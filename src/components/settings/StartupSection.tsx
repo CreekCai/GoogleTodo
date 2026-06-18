@@ -1,3 +1,4 @@
+import type { CloseButtonBehavior } from "../../App";
 import { Switch } from "../ui/Switch";
 
 type StartupSectionProps = {
@@ -6,8 +7,10 @@ type StartupSectionProps = {
   saving: boolean;
   message: string;
   minimizeOnLaunch: boolean;
+  closeButtonBehavior: CloseButtonBehavior;
   onChange: (enabled: boolean) => void;
   onMinimizeOnLaunchChange: (enabled: boolean) => void;
+  onCloseButtonBehaviorChange: (behavior: CloseButtonBehavior) => void;
 };
 
 function t(language: "en" | "zh", en: string, zh: string) {
@@ -20,9 +23,16 @@ export function StartupSection({
   saving,
   message,
   minimizeOnLaunch,
+  closeButtonBehavior,
   onChange,
   onMinimizeOnLaunchChange,
+  onCloseButtonBehaviorChange,
 }: StartupSectionProps) {
+  const closeBehaviorOptions: Array<{ value: CloseButtonBehavior; label: string }> = [
+    { value: "exit", label: t(language, "Close app", "关闭应用") },
+    { value: "minimizeToTray", label: t(language, "Minimize to tray", "最小化到托盘") },
+  ];
+
   return (
     <section className="space-y-md">
       <h3 className="border-b border-hairline-soft pb-xs text-title-md text-ink dark:border-surface-dark-elevated dark:text-on-dark">
@@ -48,6 +58,35 @@ export function StartupSection({
           </div>
         </div>
         <Switch checked={minimizeOnLaunch} onChange={onMinimizeOnLaunchChange} />
+      </div>
+      <div className="flex flex-col gap-md rounded-lg border border-hairline bg-canvas p-md dark:border-surface-dark-elevated dark:bg-surface-dark sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="text-body-sm font-semibold text-ink dark:text-on-dark">
+            {t(language, "When clicking the window close button", "点击窗口关闭按钮时")}
+          </div>
+          <div className="mt-xxs text-caption text-muted dark:text-on-dark-soft">
+            {t(language, "Choose whether Google Todo exits or keeps running from the tray.", "选择关闭应用，或保持在托盘中继续运行。")}
+          </div>
+        </div>
+        <div className="inline-flex shrink-0 rounded-full border border-hairline bg-surface-soft p-xxs dark:border-surface-dark-elevated dark:bg-surface-dark-elevated">
+          {closeBehaviorOptions.map((option) => {
+            const active = closeButtonBehavior === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                className={`min-w-[7rem] rounded-full px-md py-xs text-button transition-colors ${
+                  active
+                    ? "border border-hairline bg-canvas text-ink shadow-subtle dark:border-surface-tint dark:bg-surface-dark dark:text-on-dark"
+                    : "text-muted hover:text-ink dark:text-on-dark-soft dark:hover:text-on-dark"
+                }`}
+                onClick={() => onCloseButtonBehaviorChange(option.value)}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
     </section>
   );

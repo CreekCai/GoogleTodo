@@ -1,6 +1,6 @@
 import type { ThemeMode } from "../../types";
 import type { GoogleCalendarListDto, GoogleProxyConfig } from "../../api/googleTasks";
-import type { HotkeyConfig } from "../../App";
+import type { CloseButtonBehavior, HotkeyConfig } from "../../App";
 import { Modal } from "../ui/Modal";
 import { AboutSection } from "../settings/AboutSection";
 import { AppearanceSection } from "../settings/AppearanceSection";
@@ -33,6 +33,7 @@ type SettingsModalProps = {
   startupSaving: boolean;
   startupMessage: string;
   minimizeOnLaunch: boolean;
+  closeButtonBehavior: CloseButtonBehavior;
   autoSyncMode: AutoSyncMode;
   calendarLists: GoogleCalendarListDto[];
   selectedCalendarIds: string[] | null;
@@ -46,6 +47,7 @@ type SettingsModalProps = {
   onHotkeysReset: () => void;
   onStartupChange: (value: boolean) => void;
   onMinimizeOnLaunchChange: (value: boolean) => void;
+  onCloseButtonBehaviorChange: (value: CloseButtonBehavior) => void;
   onAutoSyncModeChange: (value: AutoSyncMode) => void;
   onCalendarSelectionChange: (calendarId: string, selected: boolean) => void;
   onClose: () => void;
@@ -84,6 +86,7 @@ export function SettingsModal({
   startupSaving,
   startupMessage,
   minimizeOnLaunch,
+  closeButtonBehavior,
   autoSyncMode,
   calendarLists,
   selectedCalendarIds,
@@ -97,6 +100,7 @@ export function SettingsModal({
   onHotkeysReset,
   onStartupChange,
   onMinimizeOnLaunchChange,
+  onCloseButtonBehaviorChange,
   onAutoSyncModeChange,
   onCalendarSelectionChange,
   onClose,
@@ -165,8 +169,10 @@ export function SettingsModal({
           saving={startupSaving}
           message={startupMessage}
           minimizeOnLaunch={minimizeOnLaunch}
+          closeButtonBehavior={closeButtonBehavior}
           onChange={onStartupChange}
           onMinimizeOnLaunchChange={onMinimizeOnLaunchChange}
+          onCloseButtonBehaviorChange={onCloseButtonBehaviorChange}
         />
         <SyncSettingsSection
           language={language}

@@ -31,6 +31,7 @@ import {
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { disable as disableAutostart, enable as enableAutostart, isEnabled as isAutostartEnabled } from "@tauri-apps/plugin-autostart";
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import {
@@ -84,6 +85,8 @@ export type HotkeyConfig = {
   settings: string;
 };
 
+export type CloseButtonBehavior = "exit" | "minimizeToTray";
+
 const defaultHotkeys: HotkeyConfig = {
   toggleMainWindow: "Ctrl+Shift+Space",
   quickAdd: "Ctrl+N",
@@ -92,6 +95,19 @@ const defaultHotkeys: HotkeyConfig = {
 };
 
 const QUICK_ADD_WINDOW_LABEL = "quick-add";
+const CLOSE_BUTTON_BEHAVIOR_STORAGE_KEY = "googleTodoCloseButtonBehavior";
+const TRAY_NEW_TASK_EVENT = "google-todo://tray-new-task";
+const TRAY_OPEN_HOME_EVENT = "google-todo://tray-open-home";
+
+function loadCloseButtonBehavior(): CloseButtonBehavior {
+  if (typeof window === "undefined") {
+    return "exit";
+  }
+  return window.localStorage.getItem(CLOSE_BUTTON_BEHAVIOR_STORAGE_KEY) === "minimizeToTray"
+    ? "minimizeToTray"
+    : "exit";
+}
+
 function loadAutoSyncMode(): AutoSyncMode {
   if (typeof window === "undefined") {
     return "15";
@@ -982,6 +998,9 @@ export default function App() {
   const [launchMinimizedOnStart, setLaunchMinimizedOnStart] = useState(() =>
     loadBooleanPreference("googleTodoLaunchMinimizedOnStart"),
   );
+  const [closeButtonBehavior, setCloseButtonBehavior] = useState<CloseButtonBehavior>(() =>
+    loadCloseButtonBehavior(),
+  );
   const [autoSyncMode, setAutoSyncMode] = useState<AutoSyncMode>(() => loadAutoSyncMode());
   const [calendarLists, setCalendarLists] = useState<GoogleCalendarListDto[]>([]);
   const [selectedCalendarIds, setSelectedCalendarIds] = useState<string[] | null>(() =>
@@ -1112,6 +1131,31 @@ export default function App() {
   }, [launchMinimizedOnStart]);
 
   useEffect(() => {
+    window.localStorage.setItem(CLOSE_BUTTON_BEHAVIOR_STORAGE_KEY, closeButtonBehavior);
+  }, [closeButtonBehavior]);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+
+    getCurrentWindow()
+      .onCloseRequested((event) => {
+        if (closeButtonBehavior !== "minimizeToTray") {
+          return;
+        }
+        event.preventDefault();
+        void invoke("hide_main_window_to_tray").catch(() => undefined);
+      })
+      .then((fn) => {
+        unlisten = fn;
+      })
+      .catch(() => undefined);
+
+    return () => {
+      unlisten?.();
+    };
+  }, [closeButtonBehavior]);
+
+  useEffect(() => {
     window.localStorage.setItem("googleTodoAutoSyncIntervalMinutes", autoSyncMode);
   }, [autoSyncMode]);
 
@@ -1179,6 +1223,10 @@ export default function App() {
 
   const changeLaunchMinimizedOnStart = (enabled: boolean) => {
     setLaunchMinimizedOnStart(enabled);
+  };
+
+  const changeCloseButtonBehavior = (behavior: CloseButtonBehavior) => {
+    setCloseButtonBehavior(behavior);
   };
 
   useEffect(() => {
@@ -1639,6 +1687,47 @@ export default function App() {
   const toggleMainWindowVisibility = async () => {
     await invoke("toggle_main_window");
   };
+
+  const openHomeView = () => {
+    setSettingsOpen(false);
+    setManageListsOpen(false);
+    setSelectedTaskId("");
+    setSelectedCalendarEventId("");
+    setActiveView("list");
+    setActiveSmartView("today");
+  };
+
+  useEffect(() => {
+    let disposed = false;
+    let unlistenNewTask: (() => void) | undefined;
+    let unlistenOpenHome: (() => void) | undefined;
+
+    listen(TRAY_NEW_TASK_EVENT, () => {
+      if (!disposed) {
+        void openQuickAddWindow();
+      }
+    }, { target: "main" })
+      .then((fn) => {
+        unlistenNewTask = fn;
+      })
+      .catch(() => undefined);
+
+    listen(TRAY_OPEN_HOME_EVENT, () => {
+      if (!disposed) {
+        openHomeView();
+      }
+    }, { target: "main" })
+      .then((fn) => {
+        unlistenOpenHome = fn;
+      })
+      .catch(() => undefined);
+
+    return () => {
+      disposed = true;
+      unlistenNewTask?.();
+      unlistenOpenHome?.();
+    };
+  }, []);
 
   useEffect(() => {
     const shortcutEntries = [
@@ -2813,6 +2902,7 @@ export default function App() {
           startupSaving={startupSaving}
           startupMessage={startupMessage}
           minimizeOnLaunch={launchMinimizedOnStart}
+          closeButtonBehavior={closeButtonBehavior}
           autoSyncMode={autoSyncMode}
           calendarLists={calendarLists}
           selectedCalendarIds={selectedCalendarIds}
@@ -2822,6 +2912,7 @@ export default function App() {
           onHotkeysReset={() => setHotkeys(defaultHotkeys)}
           onStartupChange={(enabled) => void changeStartupEnabled(enabled)}
           onMinimizeOnLaunchChange={changeLaunchMinimizedOnStart}
+          onCloseButtonBehaviorChange={changeCloseButtonBehavior}
           onAutoSyncModeChange={setAutoSyncMode}
           onCalendarSelectionChange={(calendarId, selected) => {
             setSelectedCalendarIds((current) => {
