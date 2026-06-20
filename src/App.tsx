@@ -175,13 +175,8 @@ function loadListColorMap(fallbackLists: TaskListSummary[]): Record<string, numb
       Object.entries(parsed).filter((entry): entry is [string, number] => typeof entry[1] === "number"),
     );
     return {
+      ...fallback,
       ...storedColors,
-      ...Object.fromEntries(
-        fallbackLists.map((list, index) => [
-          list.id,
-          typeof storedColors[list.id] === "number" ? storedColors[list.id] : index,
-        ]),
-      ),
     };
   } catch {
     return fallback;
@@ -1024,6 +1019,7 @@ export default function App() {
   const languageRef = useRef(language);
   const resolvedThemeRef = useRef(resolvedTheme);
   const selectedCalendarIdsRef = useRef<string[] | null>(selectedCalendarIds);
+  const taskPriorityMapRef = useRef(taskPriorityMap);
   const launchMinimizeAppliedRef = useRef(false);
   const syncLoopBusyRef = useRef(false);
 
@@ -1051,6 +1047,10 @@ export default function App() {
   useEffect(() => {
     selectedCalendarIdsRef.current = selectedCalendarIds;
   }, [selectedCalendarIds]);
+
+  useEffect(() => {
+    taskPriorityMapRef.current = taskPriorityMap;
+  }, [taskPriorityMap]);
 
   useEffect(() => {
     document.documentElement.lang = language === "zh" ? "zh-CN" : "en";
@@ -1358,7 +1358,7 @@ export default function App() {
     }
 
     const nextLists = mapGoogleLists(snapshot.task_lists);
-    const nextTasks = mapGoogleTasks(snapshot.tasks, taskPriorityMap);
+    const nextTasks = mapGoogleTasks(snapshot.tasks, taskPriorityMapRef.current);
     const targetListId = preferredListId ?? activeListId;
     const nextActiveListId = nextLists.some((list) => list.id === targetListId)
       ? targetListId
@@ -1390,7 +1390,7 @@ export default function App() {
 
   const applySyncResult = (result: SyncResult, preferredListId?: string) => {
     const nextLists = mapGoogleLists(result.snapshot.task_lists);
-    const nextTasks = mapGoogleTasks(result.snapshot.tasks, taskPriorityMap);
+    const nextTasks = mapGoogleTasks(result.snapshot.tasks, taskPriorityMapRef.current);
     const nextActiveListId =
       preferredListId && nextLists.some((list) => list.id === preferredListId)
         ? preferredListId
@@ -1950,7 +1950,7 @@ export default function App() {
         due: "dueText" in patch || "dueLabel" in patch ? dueForGoogle(task, patch) : undefined,
         status: patch.completed === undefined ? undefined : patch.completed ? "completed" : "needsAction",
       });
-      const [mapped] = mapGoogleTasks([remote], taskPriorityMap);
+      const [mapped] = mapGoogleTasks([remote], taskPriorityMapRef.current);
       updateTask(taskId, { ...mapped, subtasks: task.subtasks, reminderTime: mapped.reminderTime });
       setSyncMessage(
         uiText(language, "Saved locally. Background sync is running.", "已保存到本地，后台同步中。"),
@@ -2100,7 +2100,7 @@ export default function App() {
             ? dueForGoogle({}, { dueText: dueTextByView[dueLabel], dueLabel })
             : undefined,
         });
-        const [newTask] = mapGoogleTasks([remoteTask], taskPriorityMap);
+        const [newTask] = mapGoogleTasks([remoteTask], taskPriorityMapRef.current);
         setTasks((current) => [newTask, ...current]);
         setPendingCount((current) => current + 1);
         setSyncMessage(uiText(language, "Saved locally. Syncing in the background.", "已保存到本地，正在后台同步。"));
@@ -2151,7 +2151,7 @@ export default function App() {
             dueLabel: quickDraft.dueLabel,
           }),
         });
-        const [newTask] = mapGoogleTasks([remoteTask], taskPriorityMap);
+        const [newTask] = mapGoogleTasks([remoteTask], taskPriorityMapRef.current);
         setTasks((current) => [newTask, ...current]);
         setActiveListId(newTask.listId);
         setActiveSmartView(null);
