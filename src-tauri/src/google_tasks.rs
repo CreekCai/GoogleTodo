@@ -201,6 +201,8 @@ struct GoogleIdTokenClaims {
 #[derive(Debug, Deserialize)]
 struct TaskListsResponse {
     items: Option<Vec<GoogleTaskListItem>>,
+    #[serde(rename = "nextPageToken")]
+    next_page_token: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -212,6 +214,8 @@ struct GoogleTaskListItem {
 #[derive(Debug, Deserialize)]
 struct TasksResponse {
     items: Option<Vec<GoogleTaskItem>>,
+    #[serde(rename = "nextPageToken")]
+    next_page_token: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -453,22 +457,34 @@ pub fn google_task_lists(
 ) -> Result<Vec<GoogleTaskListDto>, String> {
     let token = access_token(&app, &state)?;
     let client = http_client()?;
-    let response: TaskListsResponse = get_json(
-        &client,
-        &format!("{TASKS_API_BASE}/users/@me/lists"),
-        &token,
-        "获取 Google 任务列表失败",
-    )?;
+    let mut page_token: Option<String> = None;
+    let mut lists = Vec::new();
 
-    Ok(response
-        .items
-        .unwrap_or_default()
-        .into_iter()
-        .map(|item| GoogleTaskListDto {
-            id: item.id,
-            title: item.title,
-        })
-        .collect())
+    loop {
+        let mut request = client
+            .get(format!("{TASKS_API_BASE}/users/@me/lists"))
+            .bearer_auth(&token)
+            .query(&[("maxResults", "1000")]);
+
+        if let Some(next_page_token) = page_token.as_deref() {
+            request = request.query(&[("pageToken", next_page_token)]);
+        }
+
+        let response: TaskListsResponse = send_json(request, "获取 Google 任务列表失败")?;
+        lists.extend(response.items.unwrap_or_default().into_iter().map(|item| {
+            GoogleTaskListDto {
+                id: item.id,
+                title: item.title,
+            }
+        }));
+
+        page_token = response.next_page_token;
+        if page_token.is_none() {
+            break;
+        }
+    }
+
+    Ok(lists)
 }
 
 #[tauri::command]
@@ -479,25 +495,40 @@ pub fn google_tasks(
 ) -> Result<Vec<GoogleTaskDto>, String> {
     let token = access_token(&app, &state)?;
     let client = http_client()?;
-    let url = format!(
-        "{TASKS_API_BASE}/lists/{}/tasks",
-        encode_path_segment(&task_list_id)
-    );
-    let response: TasksResponse = send_json(
-        client.get(url).bearer_auth(&token).query(&[
+    let mut page_token: Option<String> = None;
+    let mut tasks = Vec::new();
+
+    loop {
+        let url = format!(
+            "{TASKS_API_BASE}/lists/{}/tasks",
+            encode_path_segment(&task_list_id)
+        );
+        let mut request = client.get(url).bearer_auth(&token).query(&[
             ("showCompleted", "true"),
             ("showHidden", "true"),
             ("maxResults", "100"),
-        ]),
-        "获取 Google 任务失败",
-    )?;
+        ]);
 
-    Ok(response
-        .items
-        .unwrap_or_default()
-        .into_iter()
-        .map(|task| map_task(task, &task_list_id))
-        .collect())
+        if let Some(next_page_token) = page_token.as_deref() {
+            request = request.query(&[("pageToken", next_page_token)]);
+        }
+
+        let response: TasksResponse = send_json(request, "获取 Google 任务失败")?;
+        tasks.extend(
+            response
+                .items
+                .unwrap_or_default()
+                .into_iter()
+                .map(|task| map_task(task, &task_list_id)),
+        );
+
+        page_token = response.next_page_token;
+        if page_token.is_none() {
+            break;
+        }
+    }
+
+    Ok(tasks)
 }
 
 #[tauri::command]

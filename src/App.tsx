@@ -95,9 +95,21 @@ const defaultHotkeys: HotkeyConfig = {
 };
 
 const QUICK_ADD_WINDOW_LABEL = "quick-add";
+const THEME_STORAGE_KEY = "googleTodoTheme";
+const SHOW_COMPLETED_TASKS_STORAGE_KEY = "googleTodoShowCompletedTasks";
+const SHOW_TASK_COUNT_STORAGE_KEY = "googleTodoShowTaskCount";
+const EXPAND_SUBTASKS_STORAGE_KEY = "googleTodoExpandSubtasks";
 const CLOSE_BUTTON_BEHAVIOR_STORAGE_KEY = "googleTodoCloseButtonBehavior";
 const TRAY_NEW_TASK_EVENT = "google-todo://tray-new-task";
 const TRAY_OPEN_HOME_EVENT = "google-todo://tray-open-home";
+
+function loadThemeMode(): ThemeMode {
+  if (typeof window === "undefined") {
+    return "light";
+  }
+  const saved = window.localStorage.getItem(THEME_STORAGE_KEY);
+  return saved === "dark" || saved === "system" ? saved : "light";
+}
 
 function loadCloseButtonBehavior(): CloseButtonBehavior {
   if (typeof window === "undefined") {
@@ -141,6 +153,10 @@ function loadBooleanPreference(key: string, fallback = false) {
   }
   const stored = window.localStorage.getItem(key);
   return stored === null ? fallback : stored === "true";
+}
+
+function saveBooleanPreference(key: string, value: boolean) {
+  window.localStorage.setItem(key, value ? "true" : "false");
 }
 
 function loadHotkeys(): HotkeyConfig {
@@ -938,7 +954,7 @@ function recurrenceText(task: Task) {
 }
 
 export default function App() {
-  const [theme, setTheme] = useState<ThemeMode>("light");
+  const [theme, setTheme] = useState<ThemeMode>(() => loadThemeMode());
   const [language, setLanguage] = useState<LanguageMode>(() => {
     const saved = typeof window === "undefined" ? null : window.localStorage.getItem("googleTodoLanguage");
     return saved === "zh" ? "zh" : "en";
@@ -951,12 +967,18 @@ export default function App() {
   const [activeSmartView, setActiveSmartView] = useState<SmartView | null>("today");
   const [selectedTaskId, setSelectedTaskId] = useState("");
   const [selectedCalendarEventId, setSelectedCalendarEventId] = useState("");
-  const [showCompleted, setShowCompleted] = useState(true);
-  const [showTaskCount, setShowTaskCount] = useState(true);
+  const [showCompleted, setShowCompleted] = useState(() =>
+    loadBooleanPreference(SHOW_COMPLETED_TASKS_STORAGE_KEY, true),
+  );
+  const [showTaskCount, setShowTaskCount] = useState(() =>
+    loadBooleanPreference(SHOW_TASK_COUNT_STORAGE_KEY, true),
+  );
   const [showCollapsedSidebarBadges, setShowCollapsedSidebarBadges] = useState(() =>
     loadBooleanPreference("googleTodoShowCollapsedSidebarBadges", true),
   );
-  const [expandSubtasks, setExpandSubtasks] = useState(true);
+  const [expandSubtasks, setExpandSubtasks] = useState(() =>
+    loadBooleanPreference(EXPAND_SUBTASKS_STORAGE_KEY, true),
+  );
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(localDate(0).slice(0, 7));
   const [searchValue, setSearchValue] = useState("");
@@ -1020,6 +1042,7 @@ export default function App() {
   const resolvedThemeRef = useRef(resolvedTheme);
   const selectedCalendarIdsRef = useRef<string[] | null>(selectedCalendarIds);
   const taskPriorityMapRef = useRef(taskPriorityMap);
+  const lastSyncedAtRef = useRef<string | null>(lastSyncedAt);
   const launchMinimizeAppliedRef = useRef(false);
   const syncLoopBusyRef = useRef(false);
 
@@ -1051,6 +1074,14 @@ export default function App() {
   useEffect(() => {
     taskPriorityMapRef.current = taskPriorityMap;
   }, [taskPriorityMap]);
+
+  useEffect(() => {
+    lastSyncedAtRef.current = lastSyncedAt;
+  }, [lastSyncedAt]);
+
+  useEffect(() => {
+    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+  }, [theme]);
 
   useEffect(() => {
     document.documentElement.lang = language === "zh" ? "zh-CN" : "en";
@@ -1117,17 +1148,23 @@ export default function App() {
   }, [taskActivityHistory]);
 
   useEffect(() => {
-    window.localStorage.setItem(
-      "googleTodoShowCollapsedSidebarBadges",
-      showCollapsedSidebarBadges ? "true" : "false",
-    );
+    saveBooleanPreference(SHOW_COMPLETED_TASKS_STORAGE_KEY, showCompleted);
+  }, [showCompleted]);
+
+  useEffect(() => {
+    saveBooleanPreference(SHOW_TASK_COUNT_STORAGE_KEY, showTaskCount);
+  }, [showTaskCount]);
+
+  useEffect(() => {
+    saveBooleanPreference("googleTodoShowCollapsedSidebarBadges", showCollapsedSidebarBadges);
   }, [showCollapsedSidebarBadges]);
 
   useEffect(() => {
-    window.localStorage.setItem(
-      "googleTodoLaunchMinimizedOnStart",
-      launchMinimizedOnStart ? "true" : "false",
-    );
+    saveBooleanPreference(EXPAND_SUBTASKS_STORAGE_KEY, expandSubtasks);
+  }, [expandSubtasks]);
+
+  useEffect(() => {
+    saveBooleanPreference("googleTodoLaunchMinimizedOnStart", launchMinimizedOnStart);
   }, [launchMinimizedOnStart]);
 
   useEffect(() => {
@@ -1621,6 +1658,34 @@ export default function App() {
     }, intervalMinutes * 60 * 1000);
 
     return () => window.clearInterval(timer);
+  }, [authStatus?.signed_in, autoSyncMode]);
+
+  useEffect(() => {
+    if (!authStatus?.signed_in || autoSyncMode === "off") {
+      return;
+    }
+
+    const intervalMs = Number(autoSyncMode) * 60 * 1000;
+    const syncIfStale = () => {
+      if (document.visibilityState === "hidden") {
+        return;
+      }
+
+      const lastSyncedAt = lastSyncedAtRef.current;
+      const lastSyncedMs = lastSyncedAt ? Number(lastSyncedAt) * 1000 : 0;
+      const syncIsStale = !lastSyncedMs || Date.now() - lastSyncedMs >= intervalMs;
+      if (syncIsStale) {
+        void refreshGoogleWorkspaceData(activeListIdRef.current);
+      }
+    };
+
+    window.addEventListener("focus", syncIfStale);
+    document.addEventListener("visibilitychange", syncIfStale);
+
+    return () => {
+      window.removeEventListener("focus", syncIfStale);
+      document.removeEventListener("visibilitychange", syncIfStale);
+    };
   }, [authStatus?.signed_in, autoSyncMode]);
 
   useEffect(() => {
