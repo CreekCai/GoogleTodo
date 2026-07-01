@@ -669,8 +669,8 @@ function displayDueText(dueText: string, language: LanguageMode) {
 }
 
 function dueForGoogle(task: Partial<Task>, patch: Partial<Task>) {
-  const dueText = patch.dueText ?? task.dueText;
-  const dueLabel = patch.dueLabel ?? task.dueLabel;
+  const dueText = Object.prototype.hasOwnProperty.call(patch, "dueText") ? patch.dueText : task.dueText;
+  const dueLabel = Object.prototype.hasOwnProperty.call(patch, "dueLabel") ? patch.dueLabel : task.dueLabel;
 
   if (!dueText) {
     return "";
@@ -691,6 +691,18 @@ function dueForGoogle(task: Partial<Task>, patch: Partial<Task>) {
     return localDate(-1);
   }
   return "";
+}
+
+function patchValue<T, K extends keyof T>(source: Partial<T>, fallback: T, key: K): T[K] {
+  return Object.prototype.hasOwnProperty.call(source, key) ? source[key] as T[K] : fallback[key];
+}
+
+function mergeTaskPatch(task: Task, patch: Partial<Task>) {
+  const next = { ...task };
+  (Object.keys(patch) as Array<keyof Task>).forEach((key) => {
+    next[key] = patch[key] as never;
+  });
+  return next;
 }
 
 function splitTaskNotes(notes?: string | null) {
@@ -1045,6 +1057,9 @@ export default function App() {
   const lastSyncedAtRef = useRef<string | null>(lastSyncedAt);
   const launchMinimizeAppliedRef = useRef(false);
   const syncLoopBusyRef = useRef(false);
+  const syncLoopQueuedRef = useRef(false);
+  const syncLoopQueuedListIdRef = useRef<string | undefined>(undefined);
+  const localTaskOverridesRef = useRef<Map<string, Partial<Task>>>(new Map());
 
   const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? null;
   const selectedCalendarEvent =
@@ -1396,6 +1411,7 @@ export default function App() {
 
     const nextLists = mapGoogleLists(snapshot.task_lists);
     const nextTasks = mapGoogleTasks(snapshot.tasks, taskPriorityMapRef.current);
+    const localTaskOverrides = new Map(localTaskOverridesRef.current);
     const targetListId = preferredListId ?? activeListId;
     const nextActiveListId = nextLists.some((list) => list.id === targetListId)
       ? targetListId
@@ -1406,7 +1422,16 @@ export default function App() {
       setListColorMap((current) => ({
         ...Object.fromEntries(nextLists.map((list, index) => [list.id, current[list.id] ?? index])),
       }));
-      setTasks(nextTasks);
+      setTasks((current) => {
+        const currentById = new Map(current.map((task) => [task.id, task]));
+        return nextTasks.map((task) => {
+          const override = localTaskOverrides.get(task.id);
+          if (!override) {
+            return task;
+          }
+          return mergeTaskPatch({ ...task, completedAt: currentById.get(task.id)?.completedAt ?? task.completedAt }, override);
+        });
+      });
       setUsingGoogleData(true);
       setActiveListId(nextActiveListId);
       setSelectedTaskId((current) =>
@@ -1428,6 +1453,7 @@ export default function App() {
   const applySyncResult = (result: SyncResult, preferredListId?: string) => {
     const nextLists = mapGoogleLists(result.snapshot.task_lists);
     const nextTasks = mapGoogleTasks(result.snapshot.tasks, taskPriorityMapRef.current);
+    const localTaskOverrides = new Map(localTaskOverridesRef.current);
     const nextActiveListId =
       preferredListId && nextLists.some((list) => list.id === preferredListId)
         ? preferredListId
@@ -1439,7 +1465,16 @@ export default function App() {
         setListColorMap((current) => ({
           ...Object.fromEntries(nextLists.map((list, index) => [list.id, current[list.id] ?? index])),
         }));
-        setTasks(nextTasks);
+        setTasks((current) => {
+          const currentById = new Map(current.map((task) => [task.id, task]));
+          return nextTasks.map((task) => {
+            const override = localTaskOverrides.get(task.id);
+            if (!override) {
+              return task;
+            }
+            return mergeTaskPatch({ ...task, completedAt: currentById.get(task.id)?.completedAt ?? task.completedAt }, override);
+          });
+        });
         setUsingGoogleData(true);
         setActiveListId(nextActiveListId);
         setSelectedTaskId((current) => (nextTasks.some((task) => task.id === current) ? current : ""));
@@ -1449,6 +1484,9 @@ export default function App() {
       setPendingCount(result.snapshot.pending_count);
       setOfflineMode(result.status === "offline" || result.snapshot.offline);
       setSyncMessage(result.message);
+      if (result.status === "ok" && result.snapshot.pending_count === 0) {
+        localTaskOverridesRef.current.clear();
+      }
       if (result.status !== "ok") {
         setLastGoogleError(result.message);
       }
@@ -1574,14 +1612,22 @@ export default function App() {
 
   const refreshGoogleWorkspaceData = async (preferredListId?: string) => {
     if (syncLoopBusyRef.current) {
-      setSyncMessage(uiText(languageRef.current, "Sync already running in the background", "后台同步正在进行中"));
+      syncLoopQueuedRef.current = true;
+      syncLoopQueuedListIdRef.current = preferredListId ?? syncLoopQueuedListIdRef.current;
+      setSyncMessage(uiText(languageRef.current, "Sync already running. Next changes are queued.", "同步正在进行中，后续修改已排队。"));
       return;
     }
 
     syncLoopBusyRef.current = true;
+    let nextPreferredListId = preferredListId;
     try {
-      await refreshGoogleData(preferredListId);
-      await refreshCalendarEvents(calendarMonthRef.current);
+      do {
+        syncLoopQueuedRef.current = false;
+        syncLoopQueuedListIdRef.current = undefined;
+        await refreshGoogleData(nextPreferredListId);
+        await refreshCalendarEvents(calendarMonthRef.current);
+        nextPreferredListId = syncLoopQueuedListIdRef.current ?? activeListIdRef.current;
+      } while (syncLoopQueuedRef.current);
     } finally {
       syncLoopBusyRef.current = false;
     }
@@ -1995,12 +2041,20 @@ export default function App() {
       return false;
     }
 
+    localTaskOverridesRef.current.set(taskId, {
+      ...(localTaskOverridesRef.current.get(taskId) ?? {}),
+      ...patch,
+      ...("completed" in patch
+        ? { completedAt: patch.completed ? task.completedAt ?? new Date().toISOString() : undefined }
+        : {}),
+    });
+
     try {
       const composedNotes =
         "notes" in patch || "reminderTime" in patch
           ? composeTaskNotes(
-              patch.notes ?? task.notes,
-              patch.reminderTime ?? task.reminderTime,
+              patchValue(patch, task, "notes"),
+              patchValue(patch, task, "reminderTime"),
               language,
             )
           : undefined;
