@@ -9,8 +9,6 @@ export type SmartView = "today" | "tomorrow" | "past" | "all";
 
 export type WorkspaceTab = "list" | "board" | "calendar";
 
-export type NoteColor = "default" | "amber" | "emerald" | "violet" | "cyan" | "rose";
-
 export type TaskPriority = "low" | "medium" | "high";
 
 export type TaskRecurrenceFrequency = "none" | "daily" | "weekly" | "monthly" | "yearly";
@@ -58,17 +56,4 @@ export type QuickTaskDraft = {
   dueLabel: SmartView;
   estimate: string;
   notes: string;
-};
-
-export type Note = {
-  id: string;
-  title: string;
-  body: string;
-  labels: string[];
-  color: NoteColor;
-  pinned: boolean;
-  archived: boolean;
-  reminderDate?: string;
-  createdAt: string;
-  lastEdited: string;
 };

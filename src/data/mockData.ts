@@ -1,5 +1,5 @@
 import { Briefcase, GraduationCap, Heart, Inbox, UserRound } from "lucide-react";
-import type { Note, Task, TaskListSummary } from "../types";
+import type { Task, TaskListSummary } from "../types";
 
 export const mockLists: TaskListSummary[] = [
   { id: "my-tasks", name: "My Tasks", icon: Inbox, iconClassName: "text-secondary" },
@@ -124,65 +124,5 @@ export const mockTasks: Task[] = [
     createdAt: "This week",
     lastEdited: "Today",
     subtasks: [],
-  },
-];
-
-export const mockNotes: Note[] = [
-  {
-    id: "note-sprint-planning",
-    title: "Sprint planning notes",
-    body: "Confirm owner for calendar sync polish. Split Keep integration into local notes first, then Google Workspace sync behind a separate permission check.",
-    labels: ["Work", "Ideas"],
-    color: "amber",
-    pinned: true,
-    archived: false,
-    reminderDate: "2026-07-03",
-    createdAt: "Today",
-    lastEdited: "just now",
-  },
-  {
-    id: "note-weekly-review",
-    title: "Weekly review",
-    body: "Wins: calendar editing landed. Follow up: simplify settings copy, verify offline queue messaging, write release notes.",
-    labels: ["Work"],
-    color: "default",
-    pinned: false,
-    archived: false,
-    createdAt: "Today",
-    lastEdited: "12m ago",
-  },
-  {
-    id: "note-shopping",
-    title: "Shopping list",
-    body: "- coffee beans\n- oat milk\n- printer paper\n- batteries",
-    labels: ["Personal"],
-    color: "emerald",
-    pinned: false,
-    archived: false,
-    reminderDate: "2026-07-02",
-    createdAt: "Yesterday",
-    lastEdited: "1h ago",
-  },
-  {
-    id: "note-product-ideas",
-    title: "Product ideas",
-    body: "Quick capture should offer Task or Note. Notes can link back to tasks without forcing every thought into a due date.",
-    labels: ["Ideas"],
-    color: "violet",
-    pinned: true,
-    archived: false,
-    createdAt: "This week",
-    lastEdited: "2h ago",
-  },
-  {
-    id: "note-api-reference",
-    title: "Keep API reference",
-    body: "Keep sync needs its own scope and permission story. Do not hide API limitations in the UI; show a separate status when enabled later.",
-    labels: ["Work", "Reference"],
-    color: "cyan",
-    pinned: false,
-    archived: false,
-    createdAt: "This week",
-    lastEdited: "Yesterday",
   },
 ];
