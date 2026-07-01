@@ -1,15 +1,15 @@
 {
-  "version": "0.1.24",
+  "version": "0.1.25",
   "notes": "See the assets to download this version and install.",
-  "pub_date": "2026-07-01T02:25:34.011Z",
+  "pub_date": "2026-07-01T03:32:05.275Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTSEhiM0NqWUFjTldWaU0wUnM0V1RCcjV4NGJyb1lSN3Z4MnNsTTc0clE1Q1FIU2JsSndPWkhmTFlzQU9JMXp4SnJjajl3Um4zMDZwTHUvUUl3Y3pndll1RFE2ZzY5OXd3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyODcyNzMxCWZpbGU6R29vZ2xlIFRvZG9fMC4xLjI0X3g2NC1zZXR1cC5leGUKSWxzOUQ3Z0F2KytLME5YYnFta3pxd2xrenBmNzA1c0Nla1ozUkUyL1NvZFU4a21mbyttSDJJRGoxUXU0WkVHYTZRaFhEbkRDTEROUUo5bFh4d0V4Q0E9PQo=",
-      "url": "https://github.com/CreekCai/GoogleTodo/releases/download/v0.1.24/Google.Todo_0.1.24_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTSEhiM0NqWUFjTlpuV0hhQWk0WW9ZazZaUVNESGhXRWpBMDhhYm5CaHJpMnYvQnJEWlVEeVBTRmVDalc0QzVYdXoxYXVpSkJORUlSZ3piTDhlbWprNjVQUGtWSjNLVXc4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyODc2NzIyCWZpbGU6R29vZ2xlIFRvZG9fMC4xLjI1X3g2NC1zZXR1cC5leGUKUFBPYkNnTWR1KzdvelRsSHRDNXlzYkkrTUFVYzZVeGZlTmRCTldUQXdTN0lkTFJ1akJ0S1lCNUZWS2JVNmVQSkMzMWxjTHlFTXc1RzdjNVhaSlY2QWc9PQo=",
+      "url": "https://github.com/CreekCai/GoogleTodo/releases/download/v0.1.25/Google.Todo_0.1.25_x64-setup.exe"
     },
     "windows-x86_64-nsis": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTSEhiM0NqWUFjTldWaU0wUnM0V1RCcjV4NGJyb1lSN3Z4MnNsTTc0clE1Q1FIU2JsSndPWkhmTFlzQU9JMXp4SnJjajl3Um4zMDZwTHUvUUl3Y3pndll1RFE2ZzY5OXd3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyODcyNzMxCWZpbGU6R29vZ2xlIFRvZG9fMC4xLjI0X3g2NC1zZXR1cC5leGUKSWxzOUQ3Z0F2KytLME5YYnFta3pxd2xrenBmNzA1c0Nla1ozUkUyL1NvZFU4a21mbyttSDJJRGoxUXU0WkVHYTZRaFhEbkRDTEROUUo5bFh4d0V4Q0E9PQo=",
-      "url": "https://github.com/CreekCai/GoogleTodo/releases/download/v0.1.24/Google.Todo_0.1.24_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTSEhiM0NqWUFjTlpuV0hhQWk0WW9ZazZaUVNESGhXRWpBMDhhYm5CaHJpMnYvQnJEWlVEeVBTRmVDalc0QzVYdXoxYXVpSkJORUlSZ3piTDhlbWprNjVQUGtWSjNLVXc4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyODc2NzIyCWZpbGU6R29vZ2xlIFRvZG9fMC4xLjI1X3g2NC1zZXR1cC5leGUKUFBPYkNnTWR1KzdvelRsSHRDNXlzYkkrTUFVYzZVeGZlTmRCTldUQXdTN0lkTFJ1akJ0S1lCNUZWS2JVNmVQSkMzMWxjTHlFTXc1RzdjNVhaSlY2QWc9PQo=",
+      "url": "https://github.com/CreekCai/GoogleTodo/releases/download/v0.1.25/Google.Todo_0.1.25_x64-setup.exe"
     }
   }
 }
