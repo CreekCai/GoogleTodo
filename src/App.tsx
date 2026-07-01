@@ -4,6 +4,7 @@ import { startTransition } from "react";
 import type { CSSProperties } from "react";
 import {
   Archive,
+  Bell,
   Briefcase,
   CalendarCheck,
   CalendarClock,
@@ -19,12 +20,18 @@ import {
   Folder,
   GripVertical,
   Home,
+  Lightbulb,
   ListChecks,
+  MoreHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
+  Palette,
+  Pin,
   Plus,
   RefreshCw,
   Search,
+  StickyNote,
+  Tag,
   Trash2,
   X,
 } from "lucide-react";
@@ -47,9 +54,11 @@ import { syncApi, type CachedSnapshot, type SyncResult } from "./api/sync";
 import { SettingsModal } from "./components/modals/SettingsModal";
 import type { AutoSyncMode } from "./components/settings/SyncSettingsSection";
 import { Button } from "./components/ui/Button";
-import { mockLists, mockTasks } from "./data/mockData";
+import { mockLists, mockNotes, mockTasks } from "./data/mockData";
 import { cn } from "./lib/classNames";
 import type {
+  Note,
+  NoteColor,
   QuickTaskDraft,
   ResolvedThemeMode,
   SmartView,
@@ -60,12 +69,13 @@ import type {
   ThemeMode,
 } from "./types";
 
-type WorkspaceView = "list" | "board" | "calendar" | "manage" | "archive" | "trash";
+type WorkspaceView = "list" | "board" | "notes" | "calendar" | "manage" | "archive" | "trash";
 type LanguageMode = "en" | "zh";
 type SaveState = "idle" | "saving" | "saved" | "error";
 type ListCustomColorMap = Record<string, string>;
 type CalendarEvent = GoogleCalendarEventDto;
 type TaskPriorityMap = Record<string, Task["priority"]>;
+type NoteFilter = "all" | "pinned" | "reminders" | "archive";
 type TaskActivityAction = "completed" | "deleted";
 type TaskActivityRecord = {
   id: string;
@@ -74,6 +84,17 @@ type TaskActivityRecord = {
   operatedAt: string;
   taskSnapshot: Task;
 };
+type NoteActivityAction = "archived" | "deleted";
+type NoteActivityRecord = {
+  id: string;
+  noteId: string;
+  action: NoteActivityAction;
+  operatedAt: string;
+  noteSnapshot: Note;
+};
+type UtilityActivityItem =
+  | { kind: "task"; id: string; action: TaskActivityAction; operatedAt: string; taskSnapshot: Task }
+  | { kind: "note"; id: string; action: NoteActivityAction; operatedAt: string; noteSnapshot: Note };
 type TaskListItem =
   | { kind: "task"; id: string; task: Task }
   | { kind: "calendar"; id: string; event: CalendarEvent };
@@ -100,6 +121,8 @@ const SHOW_COMPLETED_TASKS_STORAGE_KEY = "googleTodoShowCompletedTasks";
 const SHOW_TASK_COUNT_STORAGE_KEY = "googleTodoShowTaskCount";
 const EXPAND_SUBTASKS_STORAGE_KEY = "googleTodoExpandSubtasks";
 const CLOSE_BUTTON_BEHAVIOR_STORAGE_KEY = "googleTodoCloseButtonBehavior";
+const NOTES_STORAGE_KEY = "googleTodoNotes";
+const NOTE_ACTIVITY_HISTORY_STORAGE_KEY = "googleTodoNoteActivityHistory";
 const TRAY_NEW_TASK_EVENT = "google-todo://tray-new-task";
 const TRAY_OPEN_HOME_EVENT = "google-todo://tray-open-home";
 
@@ -157,6 +180,43 @@ function loadBooleanPreference(key: string, fallback = false) {
 
 function saveBooleanPreference(key: string, value: boolean) {
   window.localStorage.setItem(key, value ? "true" : "false");
+}
+
+function isNoteColor(value: unknown): value is NoteColor {
+  return value === "default" || value === "amber" || value === "emerald" || value === "violet" || value === "cyan" || value === "rose";
+}
+
+function loadNotes(): Note[] {
+  if (typeof window === "undefined") {
+    return mockNotes;
+  }
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(NOTES_STORAGE_KEY) ?? "null") as unknown;
+    if (!Array.isArray(parsed)) {
+      return mockNotes;
+    }
+    const notes = parsed.filter((item): item is Note => {
+      if (!item || typeof item !== "object") {
+        return false;
+      }
+      const candidate = item as Partial<Note>;
+      return (
+        typeof candidate.id === "string" &&
+        typeof candidate.title === "string" &&
+        typeof candidate.body === "string" &&
+        Array.isArray(candidate.labels) &&
+        candidate.labels.every((label) => typeof label === "string") &&
+        isNoteColor(candidate.color) &&
+        typeof candidate.pinned === "boolean" &&
+        typeof candidate.archived === "boolean" &&
+        typeof candidate.createdAt === "string" &&
+        typeof candidate.lastEdited === "string"
+      );
+    });
+    return notes.length > 0 ? notes : mockNotes;
+  } catch {
+    return mockNotes;
+  }
 }
 
 function loadHotkeys(): HotkeyConfig {
@@ -236,6 +296,33 @@ function loadTaskActivityHistory(): TaskActivityRecord[] {
         (candidate.action === "completed" || candidate.action === "deleted") &&
         typeof candidate.operatedAt === "string" &&
         Boolean(candidate.taskSnapshot)
+      );
+    });
+  } catch {
+    return [];
+  }
+}
+
+function loadNoteActivityHistory(): NoteActivityRecord[] {
+  if (typeof window === "undefined") {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(NOTE_ACTIVITY_HISTORY_STORAGE_KEY) ?? "[]") as unknown;
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed.filter((record): record is NoteActivityRecord => {
+      if (!record || typeof record !== "object") {
+        return false;
+      }
+      const candidate = record as Partial<NoteActivityRecord>;
+      return (
+        typeof candidate.id === "string" &&
+        typeof candidate.noteId === "string" &&
+        (candidate.action === "archived" || candidate.action === "deleted") &&
+        typeof candidate.operatedAt === "string" &&
+        Boolean(candidate.noteSnapshot)
       );
     });
   } catch {
@@ -337,7 +424,28 @@ const uiDictionary: Record<string, string> = {
   "Create a task or switch to another list.": "创建任务或切换到其他清单。",
   "No task selected": "未选择任务",
   "Pick a task from the list to edit details.": "从列表中选择一个任务以编辑详情。",
-  "Notes": "备注",
+  "Notes": "笔记",
+  "All Notes": "全部笔记",
+  "Pinned": "已置顶",
+  "Reminders": "提醒",
+  "Labels": "标签",
+  "Note": "笔记",
+  "Task": "任务",
+  "New note": "新笔记",
+  "Take a note...": "写一条笔记...",
+  "No notes here": "这里没有笔记",
+  "Create a note or switch to another filter.": "创建笔记或切换到其他筛选。",
+  "Delete note": "删除笔记",
+  "Archive note": "归档笔记",
+  "Restore note": "恢复笔记",
+  "Archived": "已归档",
+  "Open task": "打开任务",
+  "Pin note": "置顶笔记",
+  "Add label": "添加标签",
+  "Existing labels": "已有标签",
+  "Create task from note": "从笔记创建任务",
+  "Saved locally": "已保存到本地",
+  "Google Keep sync is not connected yet.": "Google Keep 同步尚未连接。",
   "Does not repeat": "不重复",
   "Daily": "每天",
   "Weekly": "每周",
@@ -423,6 +531,8 @@ const uiDictionary: Record<string, string> = {
   "New list name": "新清单名称",
   "Completed tasks are shown here. Deleted tasks are removed from Google Tasks immediately in this phase.": "这里展示已完成任务。当前阶段删除任务会立即从 Google Tasks 中移除。",
   "Deleted Google Tasks are removed immediately. Local trash is reserved for a later recycle-bin workflow.": "删除的 Google Tasks 任务会立即移除。本地回收站功能会在后续阶段补齐。",
+  "Completed, archived, and deleted items are ordered by the latest action.": "已完成、已归档和已删除项目会按最近操作时间排序。",
+  "Deleted tasks and notes are shown here with their source type.": "已删除的任务和笔记会带来源类型显示在这里。",
   "Prioritize current open tasks by dragging them between columns.": "拖动当前未完成任务，在看板中调整优先级。",
   "A calm monthly view for dates. Google Tasks due dates are date-only.": "按月查看任务日期。Google Tasks 的到期日仅支持日期，不支持具体时间。",
   "Google Calendar schedules also appear here.": "这里也会显示 Google Calendar 日程。",
@@ -493,6 +603,27 @@ const listColorSwatches = [
   { name: "Cyan", hex: "#06B6D4", className: "bg-cyan-500" },
   { name: "Rose", hex: "#F43F5E", className: "bg-rose-500" },
 ];
+
+const noteColorOptions: Array<{ id: NoteColor; label: string; dotClassName: string }> = [
+  { id: "default", label: "Default", dotClassName: "bg-white" },
+  { id: "amber", label: "Amber", dotClassName: "bg-amber-300" },
+  { id: "emerald", label: "Emerald", dotClassName: "bg-emerald-300" },
+  { id: "violet", label: "Violet", dotClassName: "bg-violet-300" },
+  { id: "cyan", label: "Cyan", dotClassName: "bg-cyan-300" },
+  { id: "rose", label: "Rose", dotClassName: "bg-rose-300" },
+];
+
+function noteColorClass(color: NoteColor) {
+  const classes: Record<NoteColor, string> = {
+    default: "bg-surface-card dark:bg-surface-dark-elevated",
+    amber: "bg-amber-50 dark:bg-amber-400/10",
+    emerald: "bg-emerald-50 dark:bg-emerald-400/10",
+    violet: "bg-violet-50 dark:bg-violet-400/10",
+    cyan: "bg-cyan-50 dark:bg-cyan-400/10",
+    rose: "bg-rose-50 dark:bg-rose-400/10",
+  };
+  return classes[color];
+}
 
 function normalizeHexColor(value: string) {
   const normalized = value.trim().replace("#", "").toUpperCase();
@@ -974,10 +1105,14 @@ export default function App() {
   const resolvedTheme = resolveTheme(theme);
   const [lists, setLists] = useState<TaskListSummary[]>(mockLists);
   const [tasks, setTasks] = useState<Task[]>(mockTasks);
+  const [notes, setNotes] = useState<Note[]>(() => loadNotes());
   const [activeView, setActiveView] = useState<WorkspaceView>("list");
   const [activeListId, setActiveListId] = useState("my-tasks");
   const [activeSmartView, setActiveSmartView] = useState<SmartView | null>("today");
+  const [activeNoteFilter, setActiveNoteFilter] = useState<NoteFilter>("all");
+  const [activeNoteLabel, setActiveNoteLabel] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState("");
+  const [selectedNoteId, setSelectedNoteId] = useState("");
   const [selectedCalendarEventId, setSelectedCalendarEventId] = useState("");
   const [showCompleted, setShowCompleted] = useState(() =>
     loadBooleanPreference(SHOW_COMPLETED_TASKS_STORAGE_KEY, true),
@@ -1012,6 +1147,7 @@ export default function App() {
   });
   const [taskPriorityMap, setTaskPriorityMap] = useState<TaskPriorityMap>(() => loadTaskPriorityMap());
   const [taskActivityHistory, setTaskActivityHistory] = useState<TaskActivityRecord[]>(() => loadTaskActivityHistory());
+  const [noteActivityHistory, setNoteActivityHistory] = useState<NoteActivityRecord[]>(() => loadNoteActivityHistory());
   const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null);
   const [googleSyncing, setGoogleSyncing] = useState(false);
   const [googleProxySaving, setGoogleProxySaving] = useState(false);
@@ -1062,6 +1198,7 @@ export default function App() {
   const localTaskOverridesRef = useRef<Map<string, Partial<Task>>>(new Map());
 
   const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? null;
+  const selectedNote = notes.find((note) => note.id === selectedNoteId) ?? null;
   const selectedCalendarEvent =
     calendarEvents.find((event) => calendarEventKey(event) === selectedCalendarEventId) ?? null;
   const googleReady = Boolean(authStatus?.signed_in && usingGoogleData);
@@ -1097,6 +1234,10 @@ export default function App() {
   useEffect(() => {
     window.localStorage.setItem(THEME_STORAGE_KEY, theme);
   }, [theme]);
+
+  useEffect(() => {
+    window.localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify(notes));
+  }, [notes]);
 
   useEffect(() => {
     document.documentElement.lang = language === "zh" ? "zh-CN" : "en";
@@ -1161,6 +1302,10 @@ export default function App() {
   useEffect(() => {
     window.localStorage.setItem("googleTodoTaskActivityHistory", JSON.stringify(taskActivityHistory));
   }, [taskActivityHistory]);
+
+  useEffect(() => {
+    window.localStorage.setItem(NOTE_ACTIVITY_HISTORY_STORAGE_KEY, JSON.stringify(noteActivityHistory));
+  }, [noteActivityHistory]);
 
   useEffect(() => {
     saveBooleanPreference(SHOW_COMPLETED_TASKS_STORAGE_KEY, showCompleted);
@@ -1284,7 +1429,7 @@ export default function App() {
   useEffect(() => {
     setSaveState("idle");
     setSaveMessage(uiText(language, "Auto-sync enabled", "已启用自动同步"));
-  }, [language, selectedCalendarEventId, selectedTaskId]);
+  }, [language, selectedCalendarEventId, selectedNoteId, selectedTaskId]);
 
   const activeTitle = useMemo(() => {
     if (activeSmartView) {
@@ -1398,6 +1543,82 @@ export default function App() {
       return (Number.isNaN(secondTime) ? 0 : secondTime) - (Number.isNaN(firstTime) ? 0 : firstTime);
     });
   }, [taskActivityHistory, tasks]);
+
+  const utilityActivityItems = useMemo<UtilityActivityItem[]>(() => {
+    const taskItems: UtilityActivityItem[] = taskActivityItems.map((record) => ({
+      kind: "task",
+      id: record.id,
+      action: record.action,
+      operatedAt: record.operatedAt,
+      taskSnapshot: record.taskSnapshot,
+    }));
+    const noteItems: UtilityActivityItem[] = noteActivityHistory.map((record) => ({
+      kind: "note",
+      id: record.id,
+      action: record.action,
+      operatedAt: record.operatedAt,
+      noteSnapshot: record.noteSnapshot,
+    }));
+    return [...taskItems, ...noteItems].sort((first, second) => {
+      const firstTime = parseActivityDate(first.operatedAt)?.getTime() ?? 0;
+      const secondTime = parseActivityDate(second.operatedAt)?.getTime() ?? 0;
+      return secondTime - firstTime;
+    });
+  }, [noteActivityHistory, taskActivityItems]);
+
+  const noteLabelSummaries = useMemo(() => {
+    const counts = new Map<string, number>();
+    notes
+      .filter((note) => !note.archived)
+      .forEach((note) => {
+        note.labels.forEach((label) => {
+          counts.set(label, (counts.get(label) ?? 0) + 1);
+        });
+      });
+    return [...counts.entries()]
+      .map(([label, count]) => ({ label, count }))
+      .sort((first, second) => first.label.localeCompare(second.label));
+  }, [notes]);
+
+  const visibleNotes = useMemo(() => {
+    const normalizedSearch = searchValue.trim().toLowerCase();
+    return notes
+      .filter((note) => {
+        if (activeNoteLabel && !note.labels.includes(activeNoteLabel)) {
+          return false;
+        }
+        if (activeNoteFilter === "archive") {
+          return note.archived;
+        }
+        if (note.archived) {
+          return false;
+        }
+        if (activeNoteFilter === "pinned") {
+          return note.pinned;
+        }
+        if (activeNoteFilter === "reminders") {
+          return Boolean(note.reminderDate);
+        }
+        return true;
+      })
+      .filter((note) => {
+        if (!normalizedSearch) {
+          return true;
+        }
+        return [note.title, note.body, ...note.labels]
+          .join(" ")
+          .toLowerCase()
+          .includes(normalizedSearch);
+      })
+      .sort((first, second) => {
+        if (first.pinned !== second.pinned) {
+          return first.pinned ? -1 : 1;
+        }
+        const firstEdited = parseActivityDate(first.lastEdited)?.getTime() ?? 0;
+        const secondEdited = parseActivityDate(second.lastEdited)?.getTime() ?? 0;
+        return secondEdited - firstEdited;
+      });
+  }, [activeNoteFilter, activeNoteLabel, notes, searchValue]);
 
   const applySnapshot = (
     snapshot: CachedSnapshot,
@@ -1803,6 +2024,7 @@ export default function App() {
     setSettingsOpen(false);
     setManageListsOpen(false);
     setSelectedTaskId("");
+    setSelectedNoteId("");
     setSelectedCalendarEventId("");
     setActiveView("list");
     setActiveSmartView("today");
@@ -1906,6 +2128,7 @@ export default function App() {
         event.preventDefault();
         setSettingsOpen(false);
         setSelectedTaskId("");
+        setSelectedNoteId("");
         setSelectedCalendarEventId("");
       }
     };
@@ -1971,6 +2194,7 @@ export default function App() {
       setTasks(mockTasks);
       setActiveSmartView("today");
       setSelectedTaskId("");
+      setSelectedNoteId("");
       setSelectedCalendarEventId("");
       setSyncMessage(uiText(language, "Signed out. Showing local demo data.", "已退出 Google 登录，当前显示本地演示数据。"));
     } catch (error) {
@@ -2204,10 +2428,15 @@ export default function App() {
     setSaveMessage(uiText(language, "Auto-sync failed. Please check your sign-in status.", "自动同步失败，请检查登录状态。"));
   };
 
-  const addTaskWithTitle = async (titleValue: string, listId = activeListId, dueLabel: SmartView = "today") => {
+  const addTaskWithTitle = async (
+    titleValue: string,
+    listId = activeListId,
+    dueLabel: SmartView = "today",
+    noteText = "",
+  ): Promise<Task | undefined> => {
     const title = titleValue.trim();
     if (!title) {
-      return;
+      return undefined;
     }
 
     if (googleReady) {
@@ -2215,6 +2444,7 @@ export default function App() {
         const remoteTask = await syncApi.createTask({
           task_list_id: listId,
           title,
+          notes: noteText || undefined,
           due: dueTextByView[dueLabel]
             ? dueForGoogle({}, { dueText: dueTextByView[dueLabel], dueLabel })
             : undefined,
@@ -2224,19 +2454,20 @@ export default function App() {
         setPendingCount((current) => current + 1);
         setSyncMessage(uiText(language, "Saved locally. Syncing in the background.", "已保存到本地，正在后台同步。"));
         void refreshGoogleWorkspaceData(listId);
+        return newTask;
       } catch (error) {
         const message = `${uiText(language, "Create failed: ", "创建失败：")}${String(error)}`;
         setSyncMessage(message);
         setLastGoogleError(message);
       }
-      return;
+      return undefined;
     }
 
     const newTask: Task = {
       id: createId("task"),
       listId,
       title,
-      notes: "",
+      notes: noteText,
       dueLabel,
       dueText: dueTextByView[dueLabel],
       completed: false,
@@ -2245,6 +2476,7 @@ export default function App() {
       subtasks: [],
     };
     setTasks((current) => [newTask, ...current]);
+    return newTask;
   };
 
   const addTask = async () => {
@@ -2480,6 +2712,132 @@ export default function App() {
     }
   };
 
+  const markNotePending = () => {
+    setSaveState("idle");
+    setSaveMessage(uiText(language, "Changes pending. Save happens when focus leaves the field.", "修改已暂存，焦点移出后保存。"));
+  };
+
+  const persistNoteUpdate = () => {
+    setSaveState("saved");
+    setSaveMessage(uiText(language, "Saved locally. Google Keep sync is not connected yet.", "已保存到本地。Google Keep 同步尚未连接。"));
+    window.setTimeout(() => {
+      setSaveState("idle");
+      setSaveMessage(uiText(language, "Saved locally", "已保存到本地"));
+    }, 1600);
+  };
+
+  const createNote = (titleValue = newTaskTitle) => {
+    const title = titleValue.trim() || uiText(language, "New note", "新笔记");
+    const newNote: Note = {
+      id: createId("note"),
+      title,
+      body: "",
+      labels: activeNoteLabel ? [activeNoteLabel] : [],
+      color: "default",
+      pinned: false,
+      archived: false,
+      createdAt: "Today",
+      lastEdited: "just now",
+    };
+    setNotes((current) => [newNote, ...current]);
+    setNewTaskTitle("");
+    setSelectedTaskId("");
+    setSelectedCalendarEventId("");
+    setSelectedNoteId(newNote.id);
+    setActiveView("notes");
+    setActiveNoteFilter("all");
+    persistNoteUpdate();
+  };
+
+  const updateNote = (noteId: string, patch: Partial<Note>) => {
+    setNotes((current) =>
+      current.map((note) =>
+        note.id === noteId ? { ...note, ...patch, lastEdited: patch.lastEdited ?? "just now" } : note,
+      ),
+    );
+    if (noteId === selectedNoteId) {
+      markNotePending();
+    }
+  };
+
+  const toggleNotePinned = (noteId: string) => {
+    const note = notes.find((item) => item.id === noteId);
+    if (!note) {
+      return;
+    }
+    updateNote(noteId, { pinned: !note.pinned });
+    persistNoteUpdate();
+  };
+
+  const recordNoteActivity = (note: Note, action: NoteActivityAction) => {
+    setNoteActivityHistory((current) => [
+      {
+        id: `${action}-${note.id}-${Date.now()}`,
+        noteId: note.id,
+        action,
+        operatedAt: new Date().toISOString(),
+        noteSnapshot: note,
+      },
+      ...current.filter((record) => !(record.noteId === note.id && record.action === action)),
+    ]);
+  };
+
+  const archiveSelectedNote = () => {
+    if (!selectedNote) {
+      return;
+    }
+    recordNoteActivity(selectedNote, "archived");
+    updateNote(selectedNote.id, { archived: true });
+    persistNoteUpdate();
+    setSelectedNoteId("");
+    setActiveNoteFilter("archive");
+  };
+
+  const deleteSelectedNote = () => {
+    if (!selectedNote) {
+      return;
+    }
+    recordNoteActivity(selectedNote, "deleted");
+    setNotes((current) => current.filter((note) => note.id !== selectedNote.id));
+    persistNoteUpdate();
+    setSelectedNoteId("");
+  };
+
+  const restoreNoteFromActivity = (noteId: string) => {
+    const record = noteActivityHistory.find((item) => item.noteId === noteId);
+    if (!record) {
+      return;
+    }
+    const restoredNote = { ...record.noteSnapshot, archived: false, lastEdited: "just now" };
+    setNotes((current) => {
+      const exists = current.some((note) => note.id === noteId);
+      return exists
+        ? current.map((note) => (note.id === noteId ? restoredNote : note))
+        : [restoredNote, ...current];
+    });
+    setNoteActivityHistory((current) => current.filter((item) => item.noteId !== noteId));
+    setActiveNoteFilter("all");
+    setActiveView("notes");
+    setSelectedNoteId(noteId);
+    persistNoteUpdate();
+  };
+
+  const createTaskFromSelectedNote = async () => {
+    if (!selectedNote) {
+      return;
+    }
+    const newTask = await addTaskWithTitle(selectedNote.title, activeListId, "today", selectedNote.body);
+    if (!newTask) {
+      return;
+    }
+    setActiveView("list");
+    setActiveSmartView(null);
+    setSelectedNoteId("");
+    setSelectedCalendarEventId("");
+    setSelectedTaskId(newTask.id);
+    setSyncMessage(uiText(language, "Created a task from the selected note.", "已从选中的笔记创建任务。"));
+  };
+
   const createList = (name: string, colorIndex: number) => {
     if (googleReady) {
       window.alert(uiText(language, "Creating Google task lists is not supported in this phase.", "当前阶段暂不支持直接创建 Google 远端清单。"));
@@ -2683,6 +3041,7 @@ export default function App() {
     setActiveListId(listId);
     setActiveSmartView(null);
     setSelectedTaskId("");
+    setSelectedNoteId("");
     setSelectedCalendarEventId("");
     if (activeView !== "board" && activeView !== "calendar") {
       setActiveView("list");
@@ -2692,6 +3051,7 @@ export default function App() {
   const selectSmartView = (view: SmartView) => {
     setActiveSmartView(view);
     setSelectedTaskId("");
+    setSelectedNoteId("");
     setSelectedCalendarEventId("");
     if (activeView !== "board" && activeView !== "calendar") {
       setActiveView("list");
@@ -2704,6 +3064,7 @@ export default function App() {
       return;
     }
     setSelectedTaskId("");
+    setSelectedNoteId("");
     setSelectedCalendarEventId("");
   };
 
@@ -2713,8 +3074,12 @@ export default function App() {
         <DesignSidebar
           lists={lists}
           tasks={tasks}
+          notes={notes}
+          noteLabels={noteLabelSummaries}
           activeListId={activeListId}
           activeSmartView={activeSmartView}
+          activeNoteFilter={activeNoteFilter}
+          activeNoteLabel={activeNoteLabel}
           activeView={activeView}
           language={language}
           showCompleted={showCompleted}
@@ -2733,11 +3098,34 @@ export default function App() {
           onSearchChange={setSearchValue}
           onSelectList={selectList}
           onSelectSmartView={selectSmartView}
+          onSelectNotesHome={() => {
+            setActiveView("notes");
+            setActiveNoteFilter("all");
+            setActiveNoteLabel(null);
+            setSelectedTaskId("");
+            setSelectedCalendarEventId("");
+          }}
+          onSelectNoteFilter={(filter) => {
+            setActiveView("notes");
+            setActiveNoteFilter(filter);
+            setActiveNoteLabel(null);
+            setSelectedTaskId("");
+            setSelectedCalendarEventId("");
+          }}
+          onSelectNoteLabel={(label) => {
+            setActiveView("notes");
+            setActiveNoteLabel(label);
+            setActiveNoteFilter("all");
+            setSelectedTaskId("");
+            setSelectedCalendarEventId("");
+          }}
           onCreateList={() => setManageListsOpen(true)}
+          onCreateNote={() => createNote()}
           onAccountClick={() => setSettingsOpen(true)}
           onSync={() => void refreshGoogleWorkspaceData(activeListId)}
           onUtilityView={(view) => {
             setSelectedTaskId("");
+            setSelectedNoteId("");
             setSelectedCalendarEventId("");
             setActiveView(view);
           }}
@@ -2750,6 +3138,7 @@ export default function App() {
             language={language}
             onViewChange={(view) => {
               setSelectedTaskId("");
+              setSelectedNoteId("");
               setSelectedCalendarEventId("");
               setActiveView(view);
             }}
@@ -2842,6 +3231,39 @@ export default function App() {
             </div>
           ) : null}
 
+          {activeView === "notes" ? (
+            <div className="flex min-h-0 flex-1" onClick={closeDetailsFromPage}>
+              <NotesWorkspace
+                notes={visibleNotes}
+                allNotes={notes}
+                activeFilter={activeNoteFilter}
+                activeLabel={activeNoteLabel}
+                language={language}
+                newNoteTitle={newTaskTitle}
+                selectedNoteId={selectedNoteId}
+                onNewNoteTitleChange={setNewTaskTitle}
+                onCreateNote={() => createNote()}
+                onSelectNote={setSelectedNoteId}
+                onTogglePinned={toggleNotePinned}
+              />
+              {selectedNote ? (
+                <NoteDetailsPanel
+                  note={selectedNote}
+                  language={language}
+                  saveState={saveState}
+                  saveMessage={saveMessage}
+                  onUpdateNote={updateNote}
+                  onPersistNote={persistNoteUpdate}
+                  onArchive={archiveSelectedNote}
+                  onDelete={deleteSelectedNote}
+                  onCreateTask={createTaskFromSelectedNote}
+                  availableLabels={noteLabelSummaries.map((item) => item.label)}
+                  onClose={() => setSelectedNoteId("")}
+                />
+              ) : null}
+            </div>
+          ) : null}
+
           {activeView === "calendar" ? (
             <div className="flex min-h-0 flex-1" onClick={closeDetailsFromPage}>
               <CalendarWorkspace
@@ -2905,8 +3327,8 @@ export default function App() {
             <div className="flex min-h-0 flex-1" onClick={closeDetailsFromPage}>
               <UtilityWorkspace
                 title="Archive / Trash"
-                description="Completed and deleted tasks are ordered by the latest action."
-                items={taskActivityItems}
+                description="Completed, archived, and deleted items are ordered by the latest action."
+                items={utilityActivityItems}
                 emptyText="No archived or deleted tasks yet."
                 language={language}
                 selectedTaskId={selectedTaskId}
@@ -2917,6 +3339,7 @@ export default function App() {
                   setSelectedCalendarEventId("");
                   setSelectedTaskId(taskId);
                 }}
+                onRestoreNote={restoreNoteFromActivity}
               />
               {selectedTask ? (
                 <TaskDetailsPanel
@@ -2939,12 +3362,13 @@ export default function App() {
             <div className="flex min-h-0 flex-1" onClick={closeDetailsFromPage}>
               <UtilityWorkspace
                 title="Trash"
-                description="Deleted Google Tasks are removed immediately. Local trash is reserved for a later recycle-bin workflow."
-                items={taskActivityItems.filter((record) => record.action === "deleted")}
+                description="Deleted tasks and notes are shown here with their source type."
+                items={utilityActivityItems.filter((record) => record.action === "deleted")}
                 emptyText="Trash is empty."
                 language={language}
                 selectedTaskId={selectedTaskId}
                 onSelectTask={() => undefined}
+                onRestoreNote={restoreNoteFromActivity}
               />
               {selectedTask ? (
                 <TaskDetailsPanel
@@ -3055,8 +3479,12 @@ export default function App() {
 type DesignSidebarProps = {
   lists: TaskListSummary[];
   tasks: Task[];
+  notes: Note[];
+  noteLabels: Array<{ label: string; count: number }>;
   activeListId: string;
   activeSmartView: SmartView | null;
+  activeNoteFilter: NoteFilter;
+  activeNoteLabel: string | null;
   activeView: WorkspaceView;
   language: LanguageMode;
   showCompleted: boolean;
@@ -3075,7 +3503,11 @@ type DesignSidebarProps = {
   onSearchChange: (value: string) => void;
   onSelectList: (listId: string) => void;
   onSelectSmartView: (view: SmartView) => void;
+  onSelectNotesHome: () => void;
+  onSelectNoteFilter: (filter: NoteFilter) => void;
+  onSelectNoteLabel: (label: string) => void;
   onCreateList: () => void;
+  onCreateNote: () => void;
   onAccountClick: () => void;
   onSync: () => void;
   onUtilityView: (view: WorkspaceView) => void;
@@ -3085,8 +3517,12 @@ type DesignSidebarProps = {
 function DesignSidebar({
   lists,
   tasks,
+  notes,
+  noteLabels,
   activeListId,
   activeSmartView,
+  activeNoteFilter,
+  activeNoteLabel,
   activeView,
   language,
   showCompleted,
@@ -3105,7 +3541,11 @@ function DesignSidebar({
   onSearchChange,
   onSelectList,
   onSelectSmartView,
+  onSelectNotesHome,
+  onSelectNoteFilter,
+  onSelectNoteLabel,
   onCreateList,
+  onCreateNote,
   onAccountClick,
   onSync,
   onUtilityView,
@@ -3120,6 +3560,13 @@ function DesignSidebar({
 
   const SyncIcon = syncState === "offline" ? CloudOff : syncState === "syncing" ? RefreshCw : Cloud;
   const countableTasks = showCompleted ? tasks : tasks.filter((task) => !task.completed);
+  const activeNotes = notes.filter((note) => !note.archived);
+  const noteFilters: Array<{ id: NoteFilter; label: string; icon: typeof StickyNote; count: number }> = [
+    { id: "all", label: uiText(language, "All Notes", "全部笔记"), icon: StickyNote, count: activeNotes.length },
+    { id: "pinned", label: uiText(language, "Pinned", "已置顶"), icon: Pin, count: activeNotes.filter((note) => note.pinned).length },
+    { id: "reminders", label: uiText(language, "Reminders", "提醒"), icon: Bell, count: activeNotes.filter((note) => note.reminderDate).length },
+    { id: "archive", label: uiText(language, "Archive", "归档"), icon: Archive, count: notes.filter((note) => note.archived).length },
+  ];
   const showCollapsedCountBadges = collapsed && showTaskCount && showCollapsedSidebarBadges;
   const listScrollRef = useRef<HTMLDivElement | null>(null);
   const [listOverflowing, setListOverflowing] = useState(false);
@@ -3188,9 +3635,9 @@ function DesignSidebar({
 
       {!collapsed ? (
         <>
-          <Button className="mt-md w-full rounded-lg shadow-subtle active:translate-y-px" onClick={onCreateList}>
+          <Button className="mt-md w-full rounded-lg shadow-subtle active:translate-y-px" onClick={activeView === "notes" ? onCreateNote : onCreateList}>
             <Plus size={18} />
-            {uiText(language, "New List", "新建清单")}
+            {activeView === "notes" ? uiText(language, "New note", "新笔记") : uiText(language, "New List", "新建清单")}
           </Button>
           <label className="mt-md flex h-10 items-center gap-sm rounded-lg border border-hairline bg-surface-card px-sm shadow-subtle transition-colors focus-within:border-primary dark:border-surface-dark-elevated dark:bg-surface-dark">
             <Search size={17} className="text-muted" />
@@ -3205,64 +3652,159 @@ function DesignSidebar({
         </>
       ) : null}
 
-      <div ref={listScrollRef} id="sidebar-list-scroll" className="mt-md min-h-0 flex-1 overflow-y-auto pr-1 app-scrollbar">
-        <nav className="space-y-xs">
-          {smartViews.map((item) => {
-            const Icon = item.icon;
-            const count = item.id === "all"
-              ? countableTasks.length
-              : countableTasks.filter((task) => task.dueLabel === item.id).length;
-            const active = activeView === "list" && activeSmartView === item.id;
-            return (
-              <button
-                key={item.id}
-                className={cn(
-                  "app-focus-ring relative flex h-10 w-full items-center rounded-lg text-left text-title-md transition-colors",
-                  collapsed ? "justify-center px-xs" : "gap-sm px-sm",
-                  active
-                    ? "bg-primary text-on-dark shadow-subtle dark:bg-primary dark:text-on-dark"
-                    : "text-body hover:bg-surface-card dark:text-on-dark-soft dark:hover:bg-surface-dark",
-                )}
-                onClick={() => onSelectSmartView(item.id)}
-                title={item.label}
-              >
-                <Icon size={20} />
-                {showCollapsedCountBadges ? <CollapsedCountBadge count={count} active={active} /> : null}
-                {!collapsed ? <span>{item.label}</span> : null}
-                {!collapsed && showTaskCount ? <span className="ml-auto rounded-full bg-surface-card px-xs text-caption text-muted dark:bg-surface-dark-elevated">{count}</span> : null}
-              </button>
-            );
-          })}
-        </nav>
+      <div
+        className={cn(
+          "mt-md rounded-xl border border-hairline bg-surface-card p-1 shadow-subtle dark:border-surface-dark-elevated dark:bg-surface-dark",
+          collapsed ? "grid gap-1" : "grid grid-cols-2 gap-1",
+        )}
+      >
+        <button
+          className={cn(
+            "app-focus-ring flex h-9 items-center rounded-lg text-body-sm font-medium transition-colors",
+            collapsed ? "justify-center px-xs" : "justify-center gap-xs px-sm",
+            activeView !== "notes"
+              ? "border border-blue-100 bg-blue-50 text-primary shadow-subtle dark:border-blue-400/20 dark:bg-blue-400/10 dark:text-blue-200"
+              : "text-body hover:bg-surface-card dark:text-on-dark-soft dark:hover:bg-surface-dark",
+          )}
+          onClick={() => onSelectSmartView(activeSmartView ?? "today")}
+          title={uiText(language, "Tasks", "任务")}
+        >
+          <ListChecks size={18} />
+          {!collapsed ? <span>{uiText(language, "Tasks", "任务")}</span> : null}
+        </button>
+        <button
+          className={cn(
+            "app-focus-ring flex h-9 items-center rounded-lg text-body-sm font-medium transition-colors",
+            collapsed ? "justify-center px-xs" : "justify-center gap-xs px-sm",
+            activeView === "notes"
+              ? "border border-blue-100 bg-blue-50 text-primary shadow-subtle dark:border-blue-400/20 dark:bg-blue-400/10 dark:text-blue-200"
+              : "text-body hover:bg-surface-card dark:text-on-dark-soft dark:hover:bg-surface-dark",
+          )}
+          onClick={onSelectNotesHome}
+          title={uiText(language, "Notes", "笔记")}
+        >
+          <StickyNote size={18} />
+          {!collapsed ? <span>{uiText(language, "Notes", "笔记")}</span> : null}
+        </button>
+      </div>
 
-        <div className="mt-md">
-          {!collapsed ? <div className="px-sm text-caption font-semibold text-muted">{uiText(language, "Lists", "清单")}</div> : null}
-          <div className="mt-xs space-y-xs">
-            {lists.map((list, index) => {
-              const ListIcon = [Folder, Briefcase, Home][index % 3];
-              const count = countableTasks.filter((task) => task.listId === list.id).length;
-              const active = activeView === "list" && !activeSmartView && activeListId === list.id;
-              return (
-                <button
-                  key={list.id}
-                  className={cn(
-                    "app-focus-ring relative flex h-10 w-full items-center rounded-lg text-left text-title-md transition-colors",
-                    collapsed ? "justify-center px-xs" : "gap-sm px-sm",
-                    active ? "bg-primary text-on-dark shadow-subtle dark:bg-primary dark:text-on-dark" : listToneClass(list.id, lists, listColorMap, listCustomColorMap),
-                  )}
-                  style={!active ? customColorStyle(listCustomColorMap[list.id]) : undefined}
-                  onClick={() => onSelectList(list.id)}
-                  title={list.name}
-                >
-                  <ListIcon size={20} className={active ? "" : list.iconClassName} />
-                  {showCollapsedCountBadges ? <CollapsedCountBadge count={count} active={active} /> : null}
-                  {!collapsed ? <span className="min-w-0 flex-1 truncate">{list.name}</span> : null}
-                  {!collapsed && showTaskCount ? <span className="text-caption opacity-70">{count}</span> : null}
-                </button>
-              );
-            })}
-          </div>
-        </div>
+      <div ref={listScrollRef} id="sidebar-list-scroll" className="mt-md min-h-0 flex-1 overflow-y-auto pr-1 app-scrollbar">
+        {activeView === "notes" ? (
+          <>
+            <nav className="space-y-xs">
+              {noteFilters.map((item) => {
+                const Icon = item.icon;
+                const active = activeNoteFilter === item.id && !activeNoteLabel;
+                return (
+                  <button
+                    key={item.id}
+                    className={cn(
+                      "app-focus-ring relative flex h-10 w-full items-center rounded-lg text-left text-title-md transition-colors",
+                      collapsed ? "justify-center px-xs" : "gap-sm px-sm",
+                      active
+                        ? "bg-primary text-on-dark shadow-subtle dark:bg-primary dark:text-on-dark"
+                        : "text-body hover:bg-surface-card dark:text-on-dark-soft dark:hover:bg-surface-dark",
+                    )}
+                    onClick={() => onSelectNoteFilter(item.id)}
+                    title={item.label}
+                  >
+                    <Icon size={20} />
+                    {showCollapsedCountBadges ? <CollapsedCountBadge count={item.count} active={active} /> : null}
+                    {!collapsed ? <span className="min-w-0 flex-1 truncate">{item.label}</span> : null}
+                    {!collapsed && showTaskCount ? <span className="text-caption opacity-70">{item.count}</span> : null}
+                  </button>
+                );
+              })}
+            </nav>
+            <div className="mt-md">
+              {!collapsed ? <div className="px-sm text-caption font-semibold text-muted">{uiText(language, "Labels", "标签")}</div> : null}
+              <div className="mt-xs space-y-xs">
+                {noteLabels.map((item) => {
+                  const active = activeNoteLabel === item.label;
+                  return (
+                    <button
+                      key={item.label}
+                      className={cn(
+                        "app-focus-ring relative flex h-10 w-full items-center rounded-lg text-left text-title-md transition-colors",
+                        collapsed ? "justify-center px-xs" : "gap-sm px-sm",
+                        active
+                          ? "bg-primary text-on-dark shadow-subtle dark:bg-primary dark:text-on-dark"
+                          : "text-body hover:bg-surface-card dark:text-on-dark-soft dark:hover:bg-surface-dark",
+                      )}
+                      onClick={() => onSelectNoteLabel(item.label)}
+                      title={item.label}
+                    >
+                      <Tag size={19} />
+                      {showCollapsedCountBadges ? <CollapsedCountBadge count={item.count} active={active} /> : null}
+                      {!collapsed ? <span className="min-w-0 flex-1 truncate">{item.label}</span> : null}
+                      {!collapsed && showTaskCount ? <span className="text-caption opacity-70">{item.count}</span> : null}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <nav className="space-y-xs">
+              {smartViews.map((item) => {
+                const Icon = item.icon;
+                const count = item.id === "all"
+                  ? countableTasks.length
+                  : countableTasks.filter((task) => task.dueLabel === item.id).length;
+                const active = activeView === "list" && activeSmartView === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    className={cn(
+                      "app-focus-ring relative flex h-10 w-full items-center rounded-lg text-left text-title-md transition-colors",
+                      collapsed ? "justify-center px-xs" : "gap-sm px-sm",
+                      active
+                        ? "bg-primary text-on-dark shadow-subtle dark:bg-primary dark:text-on-dark"
+                        : "text-body hover:bg-surface-card dark:text-on-dark-soft dark:hover:bg-surface-dark",
+                    )}
+                    onClick={() => onSelectSmartView(item.id)}
+                    title={item.label}
+                  >
+                    <Icon size={20} />
+                    {showCollapsedCountBadges ? <CollapsedCountBadge count={count} active={active} /> : null}
+                    {!collapsed ? <span>{item.label}</span> : null}
+                    {!collapsed && showTaskCount ? <span className="ml-auto rounded-full bg-surface-card px-xs text-caption text-muted dark:bg-surface-dark-elevated">{count}</span> : null}
+                  </button>
+                );
+              })}
+            </nav>
+
+            <div className="mt-md">
+              {!collapsed ? <div className="px-sm text-caption font-semibold text-muted">{uiText(language, "Lists", "清单")}</div> : null}
+              <div className="mt-xs space-y-xs">
+                {lists.map((list, index) => {
+                  const ListIcon = [Folder, Briefcase, Home][index % 3];
+                  const count = countableTasks.filter((task) => task.listId === list.id).length;
+                  const active = activeView === "list" && !activeSmartView && activeListId === list.id;
+                  return (
+                    <button
+                      key={list.id}
+                      className={cn(
+                        "app-focus-ring relative flex h-10 w-full items-center rounded-lg text-left text-title-md transition-colors",
+                        collapsed ? "justify-center px-xs" : "gap-sm px-sm",
+                        active ? "bg-primary text-on-dark shadow-subtle dark:bg-primary dark:text-on-dark" : listToneClass(list.id, lists, listColorMap, listCustomColorMap),
+                      )}
+                      style={!active ? customColorStyle(listCustomColorMap[list.id]) : undefined}
+                      onClick={() => onSelectList(list.id)}
+                      title={list.name}
+                    >
+                      <ListIcon size={20} className={active ? "" : list.iconClassName} />
+                      {showCollapsedCountBadges ? <CollapsedCountBadge count={count} active={active} /> : null}
+                      {!collapsed ? <span className="min-w-0 flex-1 truncate">{list.name}</span> : null}
+                      {!collapsed && showTaskCount ? <span className="text-caption opacity-70">{count}</span> : null}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       <div className="shrink-0 border-t border-hairline pt-md dark:border-surface-dark">
@@ -3371,8 +3913,9 @@ function DesignTopBar({
   onViewChange,
 }: DesignTopBarProps) {
   const tabs: Array<{ id: WorkspaceView; label: string }> = [
-    { id: "list", label: uiText(language, "List", "列表") },
+    { id: "list", label: uiText(language, "Tasks", "任务") },
     { id: "board", label: uiText(language, "Board", "看板") },
+    { id: "notes", label: uiText(language, "Notes", "笔记") },
     { id: "calendar", label: uiText(language, "Calendar", "日历") },
   ];
 
@@ -3624,6 +4167,400 @@ function CalendarEventRow({
         </button>
       </div>
     </article>
+  );
+}
+
+function noteViewTitle(filter: NoteFilter, activeLabel: string | null, language: LanguageMode) {
+  if (activeLabel) {
+    return activeLabel;
+  }
+  const titles: Record<NoteFilter, [string, string]> = {
+    all: ["Notes", "笔记"],
+    pinned: ["Pinned", "已置顶"],
+    reminders: ["Reminders", "提醒"],
+    archive: ["Archive", "归档"],
+  };
+  return uiText(language, titles[filter][0], titles[filter][1]);
+}
+
+type NotesWorkspaceProps = {
+  notes: Note[];
+  allNotes: Note[];
+  activeFilter: NoteFilter;
+  activeLabel: string | null;
+  language: LanguageMode;
+  newNoteTitle: string;
+  selectedNoteId: string;
+  onNewNoteTitleChange: (value: string) => void;
+  onCreateNote: () => void;
+  onSelectNote: (noteId: string) => void;
+  onTogglePinned: (noteId: string) => void;
+};
+
+function NotesWorkspace({
+  notes,
+  allNotes,
+  activeFilter,
+  activeLabel,
+  language,
+  newNoteTitle,
+  selectedNoteId,
+  onNewNoteTitleChange,
+  onCreateNote,
+  onSelectNote,
+  onTogglePinned,
+}: NotesWorkspaceProps) {
+  const activeNotes = allNotes.filter((note) => !note.archived);
+  const pinnedCount = activeNotes.filter((note) => note.pinned).length;
+  const reminderCount = activeNotes.filter((note) => note.reminderDate).length;
+
+  return (
+    <section className="min-w-0 flex-1 overflow-y-auto bg-canvas px-lg py-lg dark:bg-surface-dark">
+      <div className="mx-auto max-w-6xl">
+        <div className="flex items-start justify-between gap-lg">
+          <div>
+            <h1 className="font-display text-display-md text-ink dark:text-on-dark">
+              {noteViewTitle(activeFilter, activeLabel, language)}
+            </h1>
+            <p className="mt-xs text-body-md text-muted dark:text-on-dark-soft">
+              {uiText(language, "Keep ideas, checklists, and reference notes alongside tasks.", "把想法、清单和参考资料放在任务旁边。")}
+            </p>
+          </div>
+          <div className="hidden items-center gap-xs rounded-xl border border-hairline bg-surface-card px-sm py-xs text-caption text-muted shadow-subtle lg:flex dark:border-surface-dark-elevated dark:bg-surface-dark-elevated">
+            <Cloud size={16} />
+            {uiText(language, "Local notes. Keep sync can be connected later.", "本地笔记。Keep 同步可后续接入。")}
+          </div>
+        </div>
+
+        <div className="mt-lg grid grid-cols-3 gap-sm">
+          <SummaryTile label={uiText(language, "All Notes", "全部笔记")} value={activeNotes.length} />
+          <SummaryTile label={uiText(language, "Pinned", "已置顶")} value={pinnedCount} />
+          <SummaryTile label={uiText(language, "Reminders", "提醒")} value={reminderCount} />
+        </div>
+
+        <div className="mt-lg flex h-12 items-center gap-sm rounded-xl border border-hairline bg-surface-card px-sm shadow-subtle transition-colors focus-within:border-primary dark:border-surface-dark-elevated dark:bg-surface-dark-elevated">
+          <Lightbulb size={20} className="text-muted" />
+          <input
+            className="min-w-0 flex-1 border-none bg-transparent p-0 text-body-md text-ink outline-none placeholder:text-muted focus:ring-0 dark:text-on-dark"
+            value={newNoteTitle}
+            onChange={(event) => onNewNoteTitleChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                onCreateNote();
+              }
+            }}
+            placeholder={uiText(language, "Take a note...", "写一条笔记...")}
+          />
+          <Button className="h-8 px-sm active:translate-y-px" onClick={onCreateNote}>
+            {uiText(language, "Add", "添加")}
+          </Button>
+        </div>
+
+        <div className="mt-lg columns-1 gap-md md:columns-2 2xl:columns-3">
+          {notes.length === 0 ? (
+            <div className="break-inside-avoid">
+              <EmptyState
+                title={uiText(language, "No notes here", "这里没有笔记")}
+                description={uiText(language, "Create a note or switch to another filter.", "创建笔记或切换到其他筛选。")}
+              />
+            </div>
+          ) : (
+            notes.map((note) => (
+              <NoteCard
+                key={note.id}
+                note={note}
+                language={language}
+                selected={selectedNoteId === note.id}
+                onSelect={() => onSelectNote(note.id)}
+                onTogglePinned={() => onTogglePinned(note.id)}
+              />
+            ))
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function NoteCard({
+  note,
+  language,
+  selected,
+  onSelect,
+  onTogglePinned,
+}: {
+  note: Note;
+  language: LanguageMode;
+  selected: boolean;
+  onSelect: () => void;
+  onTogglePinned: () => void;
+}) {
+  return (
+    <article
+      data-detail-interactive="true"
+      className={cn(
+        "mb-md break-inside-avoid rounded-xl border border-hairline p-md shadow-subtle transition-all hover:-translate-y-px hover:border-primary/30 hover:shadow-panel dark:border-surface-dark-elevated",
+        noteColorClass(note.color),
+        selected && "border-primary ring-2 ring-primary/10 dark:border-primary",
+      )}
+    >
+      <div className="flex items-start gap-sm">
+        <button className="min-w-0 flex-1 text-left" onClick={onSelect}>
+          <div className="text-title-md text-ink dark:text-on-dark">{note.title || uiText(language, "Untitled note", "无标题笔记")}</div>
+        </button>
+        <button
+          className={cn(
+            "app-focus-ring grid h-8 w-8 shrink-0 place-items-center rounded-lg transition-colors hover:bg-white/70 dark:hover:bg-surface-dark",
+            note.pinned ? "text-primary" : "text-muted",
+          )}
+          onClick={onTogglePinned}
+          title={uiText(language, "Pinned", "已置顶")}
+        >
+          <Pin size={17} />
+        </button>
+      </div>
+      {note.body ? (
+        <button className="mt-sm block w-full text-left" onClick={onSelect}>
+          <p className="max-h-36 overflow-hidden whitespace-pre-line text-body-sm text-body dark:text-on-dark-soft">
+            {note.body}
+          </p>
+        </button>
+      ) : null}
+      <div className="mt-md flex flex-wrap items-center gap-xs">
+        {note.labels.map((label) => (
+          <Badge key={label} className="border-zinc-200 bg-white/70 text-zinc-700 dark:border-zinc-400/30 dark:bg-zinc-400/10 dark:text-zinc-200">
+            {label}
+          </Badge>
+        ))}
+        {note.reminderDate ? (
+          <Badge className="border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-400/30 dark:bg-blue-400/10 dark:text-blue-200">
+            {note.reminderDate}
+          </Badge>
+        ) : null}
+      </div>
+    </article>
+  );
+}
+
+type NoteDetailsPanelProps = {
+  note: Note;
+  language: LanguageMode;
+  saveState: SaveState;
+  saveMessage: string;
+  onUpdateNote: (noteId: string, patch: Partial<Note>) => void;
+  onPersistNote: () => void;
+  onArchive: () => void;
+  onDelete: () => void;
+  onCreateTask: () => void;
+  availableLabels: string[];
+  onClose: () => void;
+};
+
+function NoteDetailsPanel({
+  note,
+  language,
+  saveState,
+  saveMessage,
+  onUpdateNote,
+  onPersistNote,
+  onArchive,
+  onDelete,
+  onCreateTask,
+  availableLabels,
+  onClose,
+}: NoteDetailsPanelProps) {
+  const titleRef = useRef<HTMLTextAreaElement | null>(null);
+  const bodyRef = useRef<HTMLTextAreaElement | null>(null);
+  const [labelDraft, setLabelDraft] = useState("");
+
+  useEffect(() => {
+    const autosize = (element: HTMLTextAreaElement | null, maxHeight: number) => {
+      if (!element) {
+        return;
+      }
+      element.style.height = "0px";
+      element.style.height = `${Math.min(element.scrollHeight, maxHeight)}px`;
+    };
+    autosize(titleRef.current, 160);
+    autosize(bodyRef.current, 520);
+  }, [note.id, note.title, note.body]);
+
+  const addLabels = (value: string) => {
+    const nextLabels = value
+      .split(",")
+      .map((label) => label.trim())
+      .filter(Boolean);
+    if (nextLabels.length === 0) {
+      return;
+    }
+    onUpdateNote(note.id, { labels: [...new Set([...note.labels, ...nextLabels])] });
+    setLabelDraft("");
+    onPersistNote();
+  };
+
+  const toggleLabel = (label: string) => {
+    const labels = note.labels.includes(label)
+      ? note.labels.filter((item) => item !== label)
+      : [...note.labels, label];
+    onUpdateNote(note.id, { labels });
+    onPersistNote();
+  };
+
+  return (
+    <aside data-detail-interactive="true" className="hidden w-[420px] shrink-0 flex-col border-l border-hairline bg-surface-soft px-lg py-lg xl:flex dark:border-surface-dark-elevated dark:bg-surface-dark-elevated">
+      <div className="flex shrink-0 items-center justify-between">
+        <button className="app-focus-ring grid h-9 w-9 place-items-center rounded-lg text-muted transition-colors hover:bg-surface-card" onClick={onClose} title={uiText(language, "Close details", "关闭详情")}>
+          <X size={18} />
+        </button>
+        <span className="rounded-lg border border-hairline bg-surface-card px-sm py-xs text-caption text-muted shadow-subtle dark:border-surface-dark dark:bg-surface-dark">
+          {note.archived ? uiText(language, "Archive", "归档") : uiText(language, "Notes", "笔记")}
+        </span>
+        <div className="flex items-center gap-xs">
+          <button
+            className={cn(
+              "app-focus-ring grid h-9 w-9 place-items-center rounded-lg transition-colors hover:bg-surface-card",
+              note.pinned ? "text-primary" : "text-muted",
+            )}
+            onClick={() => {
+              onUpdateNote(note.id, { pinned: !note.pinned });
+              onPersistNote();
+            }}
+            title={note.pinned ? uiText(language, "Pinned", "已置顶") : uiText(language, "Pin note", "置顶笔记")}
+          >
+            <Pin size={18} />
+          </button>
+          <button className="app-focus-ring grid h-9 w-9 place-items-center rounded-lg text-muted transition-colors hover:bg-surface-card" onClick={onArchive} title={uiText(language, "Archive note", "归档笔记")}>
+            <Archive size={18} />
+          </button>
+          <button className="app-focus-ring grid h-9 w-9 place-items-center rounded-lg text-error transition-colors hover:bg-error-container/30" onClick={onDelete} title={uiText(language, "Delete note", "删除笔记")}>
+            <Trash2 size={18} />
+          </button>
+        </div>
+      </div>
+
+      <div className="app-scrollbar mt-lg min-h-0 flex-1 overflow-y-auto pr-xs">
+        <div className="space-y-md">
+          <textarea
+            ref={titleRef}
+            rows={1}
+            className={cn(
+              "min-h-[56px] max-h-40 w-full resize-none overflow-y-auto rounded-xl border border-hairline px-md py-sm text-title-lg text-ink outline-none transition-colors focus:border-primary dark:border-surface-dark dark:text-on-dark",
+              noteColorClass(note.color),
+            )}
+            value={note.title}
+            onChange={(event) => onUpdateNote(note.id, { title: event.target.value })}
+            onBlur={onPersistNote}
+            placeholder={uiText(language, "New note", "新笔记")}
+          />
+          <textarea
+            ref={bodyRef}
+            rows={10}
+            className={cn(
+              "min-h-[280px] max-h-[520px] w-full resize-none overflow-y-auto rounded-xl border border-hairline px-md py-sm text-body-md text-ink outline-none transition-colors focus:border-primary dark:border-surface-dark dark:text-on-dark",
+              noteColorClass(note.color),
+            )}
+            value={note.body}
+            onChange={(event) => onUpdateNote(note.id, { body: event.target.value })}
+            onBlur={onPersistNote}
+            placeholder={uiText(language, "Take a note...", "写一条笔记...")}
+          />
+
+          <div className="grid grid-cols-[36px_1fr] items-center gap-md">
+            <Tag size={20} className="text-muted" />
+            <div className="space-y-sm rounded-xl border border-hairline bg-surface-card p-sm dark:border-surface-dark dark:bg-surface-dark">
+              {availableLabels.length > 0 ? (
+                <div className="space-y-xs">
+                  <div className="text-caption text-muted">{uiText(language, "Existing labels", "已有标签")}</div>
+                  <div className="flex flex-wrap gap-xs">
+                    {availableLabels.map((label) => {
+                      const active = note.labels.includes(label);
+                      return (
+                        <button
+                          key={label}
+                          className={cn(
+                            "app-focus-ring rounded-full border px-sm py-xxs text-caption font-medium transition-colors",
+                            active
+                              ? "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-400/30 dark:bg-blue-400/10 dark:text-blue-200"
+                              : "border-hairline bg-canvas text-muted hover:text-ink dark:border-surface-dark-elevated dark:bg-surface-dark-elevated dark:text-on-dark-soft",
+                          )}
+                          onClick={() => toggleLabel(label)}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+              <input
+                className="h-9 w-full rounded-lg border border-hairline bg-canvas px-sm text-body-md outline-none transition-colors focus:border-primary dark:border-surface-dark-elevated dark:bg-surface-dark-elevated dark:text-on-dark"
+                value={labelDraft}
+                onChange={(event) => setLabelDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    addLabels(labelDraft);
+                  }
+                }}
+                onBlur={() => addLabels(labelDraft)}
+                placeholder={uiText(language, "Add label", "添加标签")}
+              />
+            </div>
+
+            <Bell size={20} className="text-muted" />
+            <input
+              type="date"
+              className="h-10 rounded-lg border border-hairline bg-surface-card px-sm text-body-md outline-none transition-colors focus:border-primary dark:border-surface-dark dark:bg-surface-dark dark:text-on-dark"
+              value={note.reminderDate ?? ""}
+              onChange={(event) => onUpdateNote(note.id, { reminderDate: event.target.value || undefined })}
+              onBlur={onPersistNote}
+            />
+
+            <Palette size={20} className="text-muted" />
+            <div className="flex flex-wrap gap-sm">
+              {noteColorOptions.map((option) => (
+                <button
+                  key={option.id}
+                  className={cn(
+                    "app-focus-ring grid h-9 w-9 place-items-center rounded-full border border-hairline transition-transform hover:scale-105",
+                    option.dotClassName,
+                    note.color === option.id && "ring-2 ring-primary ring-offset-2",
+                  )}
+                  onClick={() => {
+                    onUpdateNote(note.id, { color: option.id });
+                    onPersistNote();
+                  }}
+                  title={option.label}
+                >
+                  {note.color === option.id ? <Check size={16} className="text-ink" /> : null}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <button
+            className="app-focus-ring flex w-full items-center gap-sm rounded-xl border border-hairline bg-surface-card px-md py-sm text-left text-body-md text-ink shadow-subtle transition-colors hover:border-primary dark:border-surface-dark dark:bg-surface-dark dark:text-on-dark"
+            onClick={onCreateTask}
+          >
+            <ListChecks size={18} className="text-primary" />
+            <span className="min-w-0 flex-1">{uiText(language, "Create task from note", "从笔记创建任务")}</span>
+            <MoreHorizontal size={18} className="text-muted" />
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-md shrink-0 border-t border-hairline pt-md dark:border-surface-dark">
+        <div className="flex items-center gap-sm rounded-xl border border-hairline bg-surface-card px-sm py-sm text-body-sm shadow-subtle dark:border-surface-dark dark:bg-surface-dark">
+          {saveState === "saving" ? <RefreshCw size={17} className="animate-spin text-muted" /> : null}
+          {saveState === "saved" ? <Check size={17} className="text-success" /> : null}
+          {saveState === "error" ? <X size={17} className="text-error" /> : null}
+          {saveState === "idle" ? <Cloud size={17} className="text-muted" /> : null}
+          <div className={cn("min-h-5 text-caption", saveState === "error" ? "text-error" : saveState === "saved" ? "text-success" : "text-muted")}>
+            {saveMessage || uiText(language, "Saved locally", "已保存到本地")}
+          </div>
+        </div>
+      </div>
+    </aside>
   );
 }
 
@@ -4900,11 +5837,12 @@ function ManageListsModal({
 type UtilityWorkspaceProps = {
   title: string;
   description: string;
-  items: TaskActivityRecord[];
+  items: UtilityActivityItem[];
   emptyText: string;
   language: LanguageMode;
   selectedTaskId: string;
   onSelectTask: (taskId: string) => void;
+  onRestoreNote: (noteId: string) => void;
 };
 
 function parseActivityDate(value?: string | null) {
@@ -4968,7 +5906,7 @@ function formatActivityTime(value: string, language: LanguageMode) {
   }).format(parsed);
 }
 
-function UtilityWorkspace({ title, description, items, emptyText, language, selectedTaskId, onSelectTask }: UtilityWorkspaceProps) {
+function UtilityWorkspace({ title, description, items, emptyText, language, selectedTaskId, onSelectTask, onRestoreNote }: UtilityWorkspaceProps) {
   return (
     <section className="min-h-0 flex-1 overflow-y-auto bg-canvas p-lg dark:bg-surface-dark">
       <h1 className="font-display text-display-md text-ink dark:text-on-dark">{uiDictionary[title] && language === "zh" ? uiDictionary[title] : title}</h1>
@@ -4981,40 +5919,61 @@ function UtilityWorkspace({ title, description, items, emptyText, language, sele
           />
         ) : (
           items.map((item) => (
-            <button
+            <div
               key={item.id}
-              data-detail-interactive={item.action === "completed" ? "true" : undefined}
+              data-detail-interactive="true"
               className={cn(
                 "flex w-full items-start gap-md rounded-lg border border-hairline bg-surface p-md text-left transition-colors dark:border-surface-dark-elevated dark:bg-surface-dark-elevated",
-                item.action === "completed" ? "hover:ring-1 hover:ring-primary" : "cursor-default",
-                selectedTaskId === item.taskId && item.action === "completed" && "ring-2 ring-primary",
+                item.kind === "task" && item.action === "completed" ? "hover:ring-1 hover:ring-primary" : "",
+                item.kind === "task" && selectedTaskId === item.taskSnapshot.id && item.action === "completed" && "ring-2 ring-primary",
               )}
-              onClick={() => {
-                if (item.action === "completed") {
-                  onSelectTask(item.taskId);
-                }
-              }}
             >
-              <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center text-muted">
-                {item.action === "completed" ? (
+              <button
+                className={cn("mt-0.5 grid h-6 w-6 shrink-0 place-items-center text-muted", item.kind === "task" && item.action === "completed" && "cursor-pointer")}
+                onClick={() => {
+                  if (item.kind === "task" && item.action === "completed") {
+                    onSelectTask(item.taskSnapshot.id);
+                  }
+                }}
+                title={item.kind === "task" ? uiText(language, "Open task", "打开任务") : uiText(language, "Note", "笔记")}
+              >
+                {item.kind === "task" && item.action === "completed" ? (
                   <CompletionGlyph completed />
+                ) : item.kind === "note" ? (
+                  <span className="grid h-5 w-5 place-items-center rounded-full bg-blue-50 text-primary dark:bg-blue-400/10 dark:text-blue-200">
+                    <StickyNote size={13} />
+                  </span>
                 ) : (
                   <span className="grid h-5 w-5 place-items-center rounded-full bg-error text-on-dark">
                     <X size={14} />
                   </span>
                 )}
-              </span>
+              </button>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-title-md text-ink dark:text-on-dark">{item.taskSnapshot.title}</span>
-                <span className="mt-xxs block text-caption text-muted dark:text-on-dark-soft">
-                  {item.action === "completed"
-                    ? uiText(language, "Completed", "已完成")
-                    : uiText(language, "Deleted", "已删除")}
-                  {" · "}
-                  {formatActivityTime(item.operatedAt, language)}
+                <span className="block truncate text-title-md text-ink dark:text-on-dark">
+                  {item.kind === "task" ? item.taskSnapshot.title : item.noteSnapshot.title}
+                </span>
+                <span className="mt-xxs flex flex-wrap items-center gap-xs text-caption text-muted dark:text-on-dark-soft">
+                  <Badge className={item.kind === "note" ? "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-400/30 dark:bg-blue-400/10 dark:text-blue-200" : undefined}>
+                    {item.kind === "note" ? uiText(language, "Note", "笔记") : uiText(language, "Task", "任务")}
+                  </Badge>
+                  <span>
+                    {item.action === "completed"
+                      ? uiText(language, "Completed", "已完成")
+                      : item.action === "archived"
+                        ? uiText(language, "Archived", "已归档")
+                        : uiText(language, "Deleted", "已删除")}
+                    {" · "}
+                    {formatActivityTime(item.operatedAt, language)}
+                  </span>
                 </span>
               </span>
-            </button>
+              {item.kind === "note" ? (
+                <Button variant="secondary" onClick={() => onRestoreNote(item.noteSnapshot.id)}>
+                  {uiText(language, "Restore note", "恢复笔记")}
+                </Button>
+              ) : null}
+            </div>
           ))
         )}
       </div>
