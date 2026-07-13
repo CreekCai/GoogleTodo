@@ -100,6 +100,33 @@ const SHOW_COMPLETED_TASKS_STORAGE_KEY = "googleTodoShowCompletedTasks";
 const SHOW_TASK_COUNT_STORAGE_KEY = "googleTodoShowTaskCount";
 const EXPAND_SUBTASKS_STORAGE_KEY = "googleTodoExpandSubtasks";
 const CLOSE_BUTTON_BEHAVIOR_STORAGE_KEY = "googleTodoCloseButtonBehavior";
+const LANGUAGE_STORAGE_KEY = "googleTodoLanguage";
+const HOTKEYS_STORAGE_KEY = "googleTodoHotkeys";
+const LIST_COLORS_STORAGE_KEY = "googleTodoListColors";
+const LIST_CUSTOM_COLORS_STORAGE_KEY = "googleTodoListCustomColors";
+const TASK_PRIORITIES_STORAGE_KEY = "googleTodoTaskPriorities";
+const TASK_ACTIVITY_HISTORY_STORAGE_KEY = "googleTodoTaskActivityHistory";
+const SHOW_COLLAPSED_SIDEBAR_BADGES_STORAGE_KEY = "googleTodoShowCollapsedSidebarBadges";
+const LAUNCH_MINIMIZED_ON_START_STORAGE_KEY = "googleTodoLaunchMinimizedOnStart";
+const AUTO_SYNC_STORAGE_KEY = "googleTodoAutoSyncIntervalMinutes";
+const SELECTED_CALENDAR_IDS_STORAGE_KEY = "googleTodoSelectedCalendarIds";
+const DB_BACKED_SETTING_KEYS = [
+  THEME_STORAGE_KEY,
+  LANGUAGE_STORAGE_KEY,
+  HOTKEYS_STORAGE_KEY,
+  LIST_COLORS_STORAGE_KEY,
+  LIST_CUSTOM_COLORS_STORAGE_KEY,
+  TASK_PRIORITIES_STORAGE_KEY,
+  TASK_ACTIVITY_HISTORY_STORAGE_KEY,
+  SHOW_COMPLETED_TASKS_STORAGE_KEY,
+  SHOW_TASK_COUNT_STORAGE_KEY,
+  SHOW_COLLAPSED_SIDEBAR_BADGES_STORAGE_KEY,
+  EXPAND_SUBTASKS_STORAGE_KEY,
+  LAUNCH_MINIMIZED_ON_START_STORAGE_KEY,
+  CLOSE_BUTTON_BEHAVIOR_STORAGE_KEY,
+  AUTO_SYNC_STORAGE_KEY,
+  SELECTED_CALENDAR_IDS_STORAGE_KEY,
+] as const;
 const TRAY_NEW_TASK_EVENT = "google-todo://tray-new-task";
 const TRAY_OPEN_HOME_EVENT = "google-todo://tray-open-home";
 
@@ -124,7 +151,7 @@ function loadAutoSyncMode(): AutoSyncMode {
   if (typeof window === "undefined") {
     return "15";
   }
-  const saved = window.localStorage.getItem("googleTodoAutoSyncIntervalMinutes");
+  const saved = window.localStorage.getItem(AUTO_SYNC_STORAGE_KEY);
   if (saved === "off" || saved === "15" || saved === "30" || saved === "60") {
     return saved;
   }
@@ -135,7 +162,7 @@ function loadSelectedCalendarIds(): string[] | null {
   if (typeof window === "undefined") {
     return null;
   }
-  const stored = window.localStorage.getItem("googleTodoSelectedCalendarIds");
+  const stored = window.localStorage.getItem(SELECTED_CALENDAR_IDS_STORAGE_KEY);
   if (stored === null) {
     return null;
   }
@@ -165,7 +192,7 @@ function loadHotkeys(): HotkeyConfig {
   }
 
   try {
-    const stored = window.localStorage.getItem("googleTodoHotkeys");
+    const stored = window.localStorage.getItem(HOTKEYS_STORAGE_KEY);
     if (!stored) {
       return defaultHotkeys;
     }
@@ -182,7 +209,7 @@ function loadListColorMap(fallbackLists: TaskListSummary[]): Record<string, numb
   }
 
   try {
-    const stored = window.localStorage.getItem("googleTodoListColors");
+    const stored = window.localStorage.getItem(LIST_COLORS_STORAGE_KEY);
     if (!stored) {
       return fallback;
     }
@@ -204,7 +231,7 @@ function loadTaskPriorityMap(): TaskPriorityMap {
     return {};
   }
   try {
-    const parsed = JSON.parse(window.localStorage.getItem("googleTodoTaskPriorities") ?? "{}") as Record<string, unknown>;
+    const parsed = JSON.parse(window.localStorage.getItem(TASK_PRIORITIES_STORAGE_KEY) ?? "{}") as Record<string, unknown>;
     return Object.fromEntries(
       Object.entries(parsed).filter(
         (entry): entry is [string, Task["priority"]] =>
@@ -221,7 +248,7 @@ function loadTaskActivityHistory(): TaskActivityRecord[] {
     return [];
   }
   try {
-    const parsed = JSON.parse(window.localStorage.getItem("googleTodoTaskActivityHistory") ?? "[]") as unknown;
+    const parsed = JSON.parse(window.localStorage.getItem(TASK_ACTIVITY_HISTORY_STORAGE_KEY) ?? "[]") as unknown;
     if (!Array.isArray(parsed)) {
       return [];
     }
@@ -241,6 +268,29 @@ function loadTaskActivityHistory(): TaskActivityRecord[] {
   } catch {
     return [];
   }
+}
+
+function parseJsonSetting<T>(value: string | undefined, fallback: T): T {
+  if (value === undefined) {
+    return fallback;
+  }
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function parseBooleanSetting(value: string | undefined, fallback: boolean) {
+  return value === undefined ? fallback : value === "true";
+}
+
+function validAutoSyncMode(value: string | undefined): AutoSyncMode | undefined {
+  return value === "off" || value === "15" || value === "30" || value === "60" ? value : undefined;
+}
+
+function validThemeMode(value: string | undefined): ThemeMode | undefined {
+  return value === "light" || value === "dark" || value === "system" ? value : undefined;
 }
 
 function taskPriority(task: Task): NonNullable<Task["priority"]> {
@@ -968,7 +1018,7 @@ function recurrenceText(task: Task) {
 export default function App() {
   const [theme, setTheme] = useState<ThemeMode>(() => loadThemeMode());
   const [language, setLanguage] = useState<LanguageMode>(() => {
-    const saved = typeof window === "undefined" ? null : window.localStorage.getItem("googleTodoLanguage");
+    const saved = typeof window === "undefined" ? null : window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
     return saved === "zh" ? "zh" : "en";
   });
   const resolvedTheme = resolveTheme(theme);
@@ -986,7 +1036,7 @@ export default function App() {
     loadBooleanPreference(SHOW_TASK_COUNT_STORAGE_KEY, true),
   );
   const [showCollapsedSidebarBadges, setShowCollapsedSidebarBadges] = useState(() =>
-    loadBooleanPreference("googleTodoShowCollapsedSidebarBadges", true),
+    loadBooleanPreference(SHOW_COLLAPSED_SIDEBAR_BADGES_STORAGE_KEY, true),
   );
   const [expandSubtasks, setExpandSubtasks] = useState(() =>
     loadBooleanPreference(EXPAND_SUBTASKS_STORAGE_KEY, true),
@@ -1005,7 +1055,7 @@ export default function App() {
       return {};
     }
     try {
-      return JSON.parse(window.localStorage.getItem("googleTodoListCustomColors") ?? "{}");
+      return JSON.parse(window.localStorage.getItem(LIST_CUSTOM_COLORS_STORAGE_KEY) ?? "{}");
     } catch {
       return {};
     }
@@ -1025,7 +1075,7 @@ export default function App() {
   const [startupSaving, setStartupSaving] = useState(false);
   const [startupMessage, setStartupMessage] = useState("Startup setting is off");
   const [launchMinimizedOnStart, setLaunchMinimizedOnStart] = useState(() =>
-    loadBooleanPreference("googleTodoLaunchMinimizedOnStart"),
+    loadBooleanPreference(LAUNCH_MINIMIZED_ON_START_STORAGE_KEY),
   );
   const [closeButtonBehavior, setCloseButtonBehavior] = useState<CloseButtonBehavior>(() =>
     loadCloseButtonBehavior(),
@@ -1045,6 +1095,7 @@ export default function App() {
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveMessage, setSaveMessage] = useState("Auto-sync enabled");
+  const [settingsHydrated, setSettingsHydrated] = useState(false);
   const [quickDraft, setQuickDraft] = useState<QuickTaskDraft>(() =>
     createDefaultQuickDraft(activeListId),
   );
@@ -1065,6 +1116,18 @@ export default function App() {
   const selectedCalendarEvent =
     calendarEvents.find((event) => calendarEventKey(event) === selectedCalendarEventId) ?? null;
   const googleReady = Boolean(authStatus?.signed_in && usingGoogleData);
+  const persistDbSetting = (key: string, value: string | null) => {
+    if (!settingsHydrated) {
+      return;
+    }
+    void syncApi.setAppSetting(key, value).catch(() => undefined);
+  };
+  const noteTaskSyncQueued = (message?: string) => {
+    setPendingCount((current) => current + 1);
+    setSyncMessage(
+      message ?? uiText(languageRef.current, "Saved locally. Syncing in the background.", "已保存到本地，正在后台同步。"),
+    );
+  };
 
   useEffect(() => {
     activeListIdRef.current = activeListId;
@@ -1095,12 +1158,140 @@ export default function App() {
   }, [lastSyncedAt]);
 
   useEffect(() => {
+    let disposed = false;
+
+    syncApi
+      .appSettings()
+      .then((settings) => {
+        if (disposed) {
+          return;
+        }
+
+        const settingValue = (key: string) => {
+          const value = settings[key] ?? window.localStorage.getItem(key) ?? undefined;
+          return value === null ? undefined : value;
+        };
+        const migrateMissingSetting = (key: string) => {
+          if (settings[key] !== undefined) {
+            return;
+          }
+          const localValue = window.localStorage.getItem(key);
+          if (localValue !== null) {
+            void syncApi.setAppSetting(key, localValue).catch(() => undefined);
+          }
+        };
+
+        DB_BACKED_SETTING_KEYS.forEach(migrateMissingSetting);
+
+        const storedTheme = validThemeMode(settingValue(THEME_STORAGE_KEY));
+        if (storedTheme) {
+          setTheme(storedTheme);
+        }
+
+        const storedLanguage = settingValue(LANGUAGE_STORAGE_KEY);
+        if (storedLanguage === "en" || storedLanguage === "zh") {
+          setLanguage(storedLanguage);
+        }
+
+        const storedHotkeys = parseJsonSetting<Partial<HotkeyConfig> | null>(
+          settingValue(HOTKEYS_STORAGE_KEY),
+          null,
+        );
+        if (storedHotkeys && typeof storedHotkeys === "object") {
+          setHotkeys({ ...defaultHotkeys, ...storedHotkeys });
+        }
+
+        const storedListColors = parseJsonSetting<Record<string, unknown> | null>(
+          settingValue(LIST_COLORS_STORAGE_KEY),
+          null,
+        );
+        if (storedListColors && typeof storedListColors === "object") {
+          const parsedColors = Object.fromEntries(
+            Object.entries(storedListColors).filter((entry): entry is [string, number] => typeof entry[1] === "number"),
+          );
+          setListColorMap((current) => ({ ...current, ...parsedColors }));
+        }
+
+        const storedCustomColors = parseJsonSetting<Record<string, unknown> | null>(
+          settingValue(LIST_CUSTOM_COLORS_STORAGE_KEY),
+          null,
+        );
+        if (storedCustomColors && typeof storedCustomColors === "object") {
+          const parsedCustomColors = Object.fromEntries(
+            Object.entries(storedCustomColors).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+          );
+          setListCustomColorMap(parsedCustomColors);
+        }
+
+        const storedPriorities = parseJsonSetting<Record<string, unknown> | null>(
+          settingValue(TASK_PRIORITIES_STORAGE_KEY),
+          null,
+        );
+        if (storedPriorities && typeof storedPriorities === "object") {
+          setTaskPriorityMap(
+            Object.fromEntries(
+              Object.entries(storedPriorities).filter(
+                (entry): entry is [string, Task["priority"]] =>
+                  entry[1] === "low" || entry[1] === "medium" || entry[1] === "high",
+              ),
+            ),
+          );
+        }
+
+        const storedHistory = parseJsonSetting<TaskActivityRecord[] | null>(
+          settingValue(TASK_ACTIVITY_HISTORY_STORAGE_KEY),
+          null,
+        );
+        if (Array.isArray(storedHistory)) {
+          setTaskActivityHistory(storedHistory);
+        }
+
+        setShowCompleted(parseBooleanSetting(settingValue(SHOW_COMPLETED_TASKS_STORAGE_KEY), true));
+        setShowTaskCount(parseBooleanSetting(settingValue(SHOW_TASK_COUNT_STORAGE_KEY), true));
+        setShowCollapsedSidebarBadges(
+          parseBooleanSetting(settingValue(SHOW_COLLAPSED_SIDEBAR_BADGES_STORAGE_KEY), true),
+        );
+        setExpandSubtasks(parseBooleanSetting(settingValue(EXPAND_SUBTASKS_STORAGE_KEY), true));
+        setLaunchMinimizedOnStart(parseBooleanSetting(settingValue(LAUNCH_MINIMIZED_ON_START_STORAGE_KEY), false));
+
+        const storedCloseBehavior = settingValue(CLOSE_BUTTON_BEHAVIOR_STORAGE_KEY);
+        if (storedCloseBehavior === "exit" || storedCloseBehavior === "minimizeToTray") {
+          setCloseButtonBehavior(storedCloseBehavior);
+        }
+
+        const storedAutoSyncMode = validAutoSyncMode(settingValue(AUTO_SYNC_STORAGE_KEY));
+        if (storedAutoSyncMode) {
+          setAutoSyncMode(storedAutoSyncMode);
+        }
+
+        const storedCalendarIds = parseJsonSetting<string[] | null>(
+          settingValue(SELECTED_CALENDAR_IDS_STORAGE_KEY),
+          null,
+        );
+        if (Array.isArray(storedCalendarIds)) {
+          setSelectedCalendarIds(storedCalendarIds.filter((value) => typeof value === "string"));
+        }
+      })
+      .finally(() => {
+        if (!disposed) {
+          setSettingsHydrated(true);
+        }
+      });
+
+    return () => {
+      disposed = true;
+    };
+  }, []);
+
+  useEffect(() => {
     window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+    persistDbSetting(THEME_STORAGE_KEY, theme);
   }, [theme]);
 
   useEffect(() => {
     document.documentElement.lang = language === "zh" ? "zh-CN" : "en";
-    window.localStorage.setItem("googleTodoLanguage", language);
+    window.localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
+    persistDbSetting(LANGUAGE_STORAGE_KEY, language);
     const dictionary = language === "zh" ? uiDictionary : reverseUiDictionary;
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     const nodes: Text[] = [];
@@ -1139,19 +1330,27 @@ export default function App() {
   }, [activeView, language, manageListsOpen, selectedCalendarEventId, selectedTaskId, settingsOpen]);
 
   useEffect(() => {
-    window.localStorage.setItem("googleTodoHotkeys", JSON.stringify(hotkeys));
+    const value = JSON.stringify(hotkeys);
+    window.localStorage.setItem(HOTKEYS_STORAGE_KEY, value);
+    persistDbSetting(HOTKEYS_STORAGE_KEY, value);
   }, [hotkeys]);
 
   useEffect(() => {
-    window.localStorage.setItem("googleTodoListColors", JSON.stringify(listColorMap));
+    const value = JSON.stringify(listColorMap);
+    window.localStorage.setItem(LIST_COLORS_STORAGE_KEY, value);
+    persistDbSetting(LIST_COLORS_STORAGE_KEY, value);
   }, [listColorMap]);
 
   useEffect(() => {
-    window.localStorage.setItem("googleTodoListCustomColors", JSON.stringify(listCustomColorMap));
+    const value = JSON.stringify(listCustomColorMap);
+    window.localStorage.setItem(LIST_CUSTOM_COLORS_STORAGE_KEY, value);
+    persistDbSetting(LIST_CUSTOM_COLORS_STORAGE_KEY, value);
   }, [listCustomColorMap]);
 
   useEffect(() => {
-    window.localStorage.setItem("googleTodoTaskPriorities", JSON.stringify(taskPriorityMap));
+    const value = JSON.stringify(taskPriorityMap);
+    window.localStorage.setItem(TASK_PRIORITIES_STORAGE_KEY, value);
+    persistDbSetting(TASK_PRIORITIES_STORAGE_KEY, value);
   }, [taskPriorityMap]);
 
   useEffect(() => {
@@ -1159,31 +1358,39 @@ export default function App() {
   }, [taskPriorityMap]);
 
   useEffect(() => {
-    window.localStorage.setItem("googleTodoTaskActivityHistory", JSON.stringify(taskActivityHistory));
+    const value = JSON.stringify(taskActivityHistory);
+    window.localStorage.setItem(TASK_ACTIVITY_HISTORY_STORAGE_KEY, value);
+    persistDbSetting(TASK_ACTIVITY_HISTORY_STORAGE_KEY, value);
   }, [taskActivityHistory]);
 
   useEffect(() => {
     saveBooleanPreference(SHOW_COMPLETED_TASKS_STORAGE_KEY, showCompleted);
+    persistDbSetting(SHOW_COMPLETED_TASKS_STORAGE_KEY, showCompleted ? "true" : "false");
   }, [showCompleted]);
 
   useEffect(() => {
     saveBooleanPreference(SHOW_TASK_COUNT_STORAGE_KEY, showTaskCount);
+    persistDbSetting(SHOW_TASK_COUNT_STORAGE_KEY, showTaskCount ? "true" : "false");
   }, [showTaskCount]);
 
   useEffect(() => {
-    saveBooleanPreference("googleTodoShowCollapsedSidebarBadges", showCollapsedSidebarBadges);
+    saveBooleanPreference(SHOW_COLLAPSED_SIDEBAR_BADGES_STORAGE_KEY, showCollapsedSidebarBadges);
+    persistDbSetting(SHOW_COLLAPSED_SIDEBAR_BADGES_STORAGE_KEY, showCollapsedSidebarBadges ? "true" : "false");
   }, [showCollapsedSidebarBadges]);
 
   useEffect(() => {
     saveBooleanPreference(EXPAND_SUBTASKS_STORAGE_KEY, expandSubtasks);
+    persistDbSetting(EXPAND_SUBTASKS_STORAGE_KEY, expandSubtasks ? "true" : "false");
   }, [expandSubtasks]);
 
   useEffect(() => {
-    saveBooleanPreference("googleTodoLaunchMinimizedOnStart", launchMinimizedOnStart);
+    saveBooleanPreference(LAUNCH_MINIMIZED_ON_START_STORAGE_KEY, launchMinimizedOnStart);
+    persistDbSetting(LAUNCH_MINIMIZED_ON_START_STORAGE_KEY, launchMinimizedOnStart ? "true" : "false");
   }, [launchMinimizedOnStart]);
 
   useEffect(() => {
     window.localStorage.setItem(CLOSE_BUTTON_BEHAVIOR_STORAGE_KEY, closeButtonBehavior);
+    persistDbSetting(CLOSE_BUTTON_BEHAVIOR_STORAGE_KEY, closeButtonBehavior);
   }, [closeButtonBehavior]);
 
   useEffect(() => {
@@ -1208,15 +1415,19 @@ export default function App() {
   }, [closeButtonBehavior]);
 
   useEffect(() => {
-    window.localStorage.setItem("googleTodoAutoSyncIntervalMinutes", autoSyncMode);
+    window.localStorage.setItem(AUTO_SYNC_STORAGE_KEY, autoSyncMode);
+    persistDbSetting(AUTO_SYNC_STORAGE_KEY, autoSyncMode);
   }, [autoSyncMode]);
 
   useEffect(() => {
     if (selectedCalendarIds === null) {
-      window.localStorage.removeItem("googleTodoSelectedCalendarIds");
+      window.localStorage.removeItem(SELECTED_CALENDAR_IDS_STORAGE_KEY);
+      persistDbSetting(SELECTED_CALENDAR_IDS_STORAGE_KEY, null);
       return;
     }
-    window.localStorage.setItem("googleTodoSelectedCalendarIds", JSON.stringify(selectedCalendarIds));
+    const value = JSON.stringify(selectedCalendarIds);
+    window.localStorage.setItem(SELECTED_CALENDAR_IDS_STORAGE_KEY, value);
+    persistDbSetting(SELECTED_CALENDAR_IDS_STORAGE_KEY, value);
   }, [selectedCalendarIds]);
 
   useEffect(() => {
@@ -2071,9 +2282,7 @@ export default function App() {
       });
       const [mapped] = mapGoogleTasks([remote], taskPriorityMapRef.current);
       updateTask(taskId, { ...mapped, subtasks: task.subtasks, reminderTime: mapped.reminderTime });
-      setSyncMessage(
-        uiText(language, "Saved locally. Background sync is running.", "已保存到本地，后台同步中。"),
-      );
+      noteTaskSyncQueued(uiText(language, "Saved locally. Background sync is running.", "已保存到本地，后台同步中。"));
       return true;
     } catch (error) {
       const message = `${uiText(language, "Save failed: ", "保存失败：")}${String(error)}`;
@@ -2221,8 +2430,7 @@ export default function App() {
         });
         const [newTask] = mapGoogleTasks([remoteTask], taskPriorityMapRef.current);
         setTasks((current) => [newTask, ...current]);
-        setPendingCount((current) => current + 1);
-        setSyncMessage(uiText(language, "Saved locally. Syncing in the background.", "已保存到本地，正在后台同步。"));
+        noteTaskSyncQueued();
         void refreshGoogleWorkspaceData(listId);
       } catch (error) {
         const message = `${uiText(language, "Create failed: ", "创建失败：")}${String(error)}`;
@@ -2276,8 +2484,7 @@ export default function App() {
         setActiveSmartView(null);
         setActiveView("list");
         setQuickDraft(createDefaultQuickDraft(newTask.listId));
-        setPendingCount((current) => current + 1);
-        setSyncMessage(uiText(language, "Saved locally. Syncing in the background.", "已保存到本地，正在后台同步。"));
+        noteTaskSyncQueued();
         void refreshGoogleWorkspaceData(newTask.listId);
       } catch (error) {
         const message = `${uiText(language, "Create failed: ", "创建失败：")}${String(error)}`;
@@ -2331,8 +2538,7 @@ export default function App() {
           ],
           lastEdited: "pending sync",
         });
-        setPendingCount((current) => current + 1);
-        setSyncMessage(uiText(language, "Saved locally. Syncing in the background.", "已保存到本地，正在后台同步。"));
+        noteTaskSyncQueued();
         void refreshGoogleWorkspaceData(selectedTask.listId);
       } catch (error) {
         const message = `${uiText(language, "Create failed: ", "创建失败：")}${String(error)}`;
@@ -2394,7 +2600,7 @@ export default function App() {
           task_id: subtaskId,
           status: completed ? "completed" : "needsAction",
         });
-        setSyncMessage(uiText(language, "Saved locally. Syncing in the background.", "已保存到本地，正在后台同步。"));
+        noteTaskSyncQueued();
         void refreshGoogleWorkspaceData(task.listId);
       } catch (error) {
         const message = `${uiText(language, "Status update failed: ", "状态更新失败：")}${String(error)}`;
@@ -2430,7 +2636,7 @@ export default function App() {
         task_id: subtask.id,
         title: titleOverride ?? subtask.title,
       });
-      setSyncMessage(uiText(language, "Saved locally. Syncing in the background.", "已保存到本地，正在后台同步。"));
+      noteTaskSyncQueued();
       void refreshGoogleWorkspaceData(selectedTask.listId);
     } catch (error) {
       const message = `${uiText(language, "Subtask save failed: ", "子任务保存失败：")}${String(error)}`;
@@ -2446,7 +2652,7 @@ export default function App() {
     if (googleReady) {
       try {
         await syncApi.deleteTask(selectedTask.listId, selectedTask.id);
-        setSyncMessage(uiText(language, "Deleted locally. Syncing in the background.", "已在本地删除，正在后台同步。"));
+        noteTaskSyncQueued(uiText(language, "Deleted locally. Syncing in the background.", "已在本地删除，正在后台同步。"));
         void refreshGoogleWorkspaceData(selectedTask.listId);
       } catch (error) {
         const message = `${uiText(language, "Delete failed: ", "删除失败：")}${String(error)}`;
@@ -2588,7 +2794,7 @@ export default function App() {
           task_id: task.id,
           previous: direction > 0 ? swapWithId : null,
         });
-        setSyncMessage(uiText(language, "Saved locally. Syncing in the background.", "已保存到本地，正在后台同步。"));
+        noteTaskSyncQueued();
         void refreshGoogleWorkspaceData(task.listId);
       } catch (error) {
         const message = `${uiText(language, "Reorder failed: ", "排序失败：")}${String(error)}`;
@@ -2728,7 +2934,7 @@ export default function App() {
           userPicture={authStatus?.signed_in ? authStatus.user_picture ?? "" : ""}
           listColorMap={listColorMap}
           listCustomColorMap={listCustomColorMap}
-          syncState={googleSyncing ? "syncing" : lastGoogleError ? "error" : offlineMode ? "offline" : "online"}
+          syncState={googleSyncing || pendingCount > 0 ? "syncing" : lastGoogleError ? "error" : offlineMode ? "offline" : "online"}
           syncMessage={syncMessage}
           onSearchChange={setSearchValue}
           onSelectList={selectList}
@@ -3129,7 +3335,7 @@ function DesignSidebar({
       : syncState === "offline"
         ? "text-warning"
         : syncState === "syncing"
-          ? "text-secondary"
+          ? "text-warning"
           : "text-success";
 
   useEffect(() => {

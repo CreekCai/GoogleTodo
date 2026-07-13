@@ -42,6 +42,7 @@ struct PendingItem {
     task_list_id: String,
     task_id: Option<String>,
     payload_json: String,
+    sync_status: String,
 }
 
 #[tauri::command]
@@ -49,6 +50,30 @@ pub async fn sync_cached_snapshot(app: AppHandle) -> Result<CachedSnapshot, Stri
     tauri::async_runtime::spawn_blocking(move || sync_cached_snapshot_blocking(app))
         .await
         .map_err(to_message)?
+}
+
+#[tauri::command]
+pub async fn sync_app_settings(app: AppHandle) -> Result<HashMap<String, String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let conn = open_app_database(&app)?;
+        read_app_settings(&conn)
+    })
+    .await
+    .map_err(to_message)?
+}
+
+#[tauri::command]
+pub async fn sync_set_app_setting(
+    app: AppHandle,
+    key: String,
+    value: Option<String>,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let conn = open_app_database(&app)?;
+        set_app_setting(&conn, &key, value.as_deref())
+    })
+    .await
+    .map_err(to_message)?
 }
 
 fn sync_cached_snapshot_blocking(app: AppHandle) -> Result<CachedSnapshot, String> {
@@ -169,10 +194,7 @@ fn sync_delete_task_blocking(
 }
 
 #[tauri::command]
-pub async fn sync_move_task(
-    app: AppHandle,
-    input: MoveTaskInput,
-) -> Result<GoogleTaskDto, String> {
+pub async fn sync_move_task(app: AppHandle, input: MoveTaskInput) -> Result<GoogleTaskDto, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let conn = open_app_database(&app)?;
         let task = read_task(&conn, &input.task_id)?
@@ -224,67 +246,80 @@ fn flush_pending_queue(
     let mut id_map: HashMap<String, String> = HashMap::new();
 
     for item in pending {
-        match item.operation.as_str() {
-            "create_task" => {
-                let mut input: CreateTaskInput =
-                    serde_json::from_str(&item.payload_json).map_err(to_message)?;
-                if let Some(parent) = input.parent.clone().and_then(|id| id_map.get(&id).cloned()) {
-                    input.parent = Some(parent);
-                }
-                let remote = retry_auth_once(state, || {
-                    google_tasks::google_create_task(app.clone(), state.clone(), input.clone())
-                })?;
-                if let Some(local_id) = item.local_id.as_deref() {
-                    id_map.insert(local_id.to_string(), remote.id.clone());
-                    delete_cached_task(conn, local_id)?;
-                }
-                upsert_task(conn, &remote)?;
-                delete_pending(conn, item.id)?;
-            }
-            "update_task" => {
-                let mut input: UpdateTaskInput =
-                    serde_json::from_str(&item.payload_json).map_err(to_message)?;
-                if let Some(remote_id) = id_map.get(&input.task_id).cloned() {
-                    input.task_id = remote_id;
-                }
-                let remote = retry_auth_once(state, || {
-                    google_tasks::google_update_task(app.clone(), state.clone(), input.clone())
-                })?;
-                upsert_task(conn, &remote)?;
-                delete_pending(conn, item.id)?;
-            }
-            "delete_task" => {
-                if let Some(task_id) = item.task_id.as_deref() {
-                    let remote_id = id_map.get(task_id).map(String::as_str).unwrap_or(task_id);
-                    if !remote_id.starts_with("local-") {
-                        retry_auth_once(state, || {
-                            google_tasks::google_delete_task(
-                                app.clone(),
-                                state.clone(),
-                                item.task_list_id.clone(),
-                                remote_id.to_string(),
-                            )
-                        })?;
-                    }
-                }
-                delete_pending(conn, item.id)?;
-            }
-            "move_task" => {
-                let mut input: MoveTaskInput =
-                    serde_json::from_str(&item.payload_json).map_err(to_message)?;
-                if let Some(remote_id) = id_map.get(&input.task_id).cloned() {
-                    input.task_id = remote_id;
-                }
-                let remote = retry_auth_once(state, || {
-                    google_tasks::google_move_task(app.clone(), state.clone(), input.clone())
-                })?;
-                upsert_task(conn, &remote)?;
-                delete_pending(conn, item.id)?;
-            }
-            _ => delete_pending(conn, item.id)?,
+        let item_id = item.id;
+        mark_pending_syncing(conn, item_id)?;
+        if let Err(error) = process_pending_item(app, conn, state, item, &mut id_map) {
+            mark_pending_failed(conn, item_id, &error)?;
+            return Err(error);
         }
+        mark_pending_completed(conn, item_id)?;
     }
 
+    Ok(())
+}
+
+fn process_pending_item(
+    app: &AppHandle,
+    conn: &Connection,
+    state: &State<GoogleTasksState>,
+    item: PendingItem,
+    id_map: &mut HashMap<String, String>,
+) -> Result<(), String> {
+    match item.operation.as_str() {
+        "create_task" => {
+            let mut input: CreateTaskInput =
+                serde_json::from_str(&item.payload_json).map_err(to_message)?;
+            if let Some(parent) = input.parent.clone().and_then(|id| id_map.get(&id).cloned()) {
+                input.parent = Some(parent);
+            }
+            let remote = retry_auth_once(state, || {
+                google_tasks::google_create_task(app.clone(), state.clone(), input.clone())
+            })?;
+            if let Some(local_id) = item.local_id.as_deref() {
+                id_map.insert(local_id.to_string(), remote.id.clone());
+                delete_cached_task(conn, local_id)?;
+            }
+            upsert_task(conn, &remote)?;
+        }
+        "update_task" => {
+            let mut input: UpdateTaskInput =
+                serde_json::from_str(&item.payload_json).map_err(to_message)?;
+            if let Some(remote_id) = id_map.get(&input.task_id).cloned() {
+                input.task_id = remote_id;
+            }
+            let remote = retry_auth_once(state, || {
+                google_tasks::google_update_task(app.clone(), state.clone(), input.clone())
+            })?;
+            upsert_task(conn, &remote)?;
+        }
+        "delete_task" => {
+            if let Some(task_id) = item.task_id.as_deref() {
+                let remote_id = id_map.get(task_id).map(String::as_str).unwrap_or(task_id);
+                if !remote_id.starts_with("local-") {
+                    retry_auth_once(state, || {
+                        google_tasks::google_delete_task(
+                            app.clone(),
+                            state.clone(),
+                            item.task_list_id.clone(),
+                            remote_id.to_string(),
+                        )
+                    })?;
+                }
+            }
+        }
+        "move_task" => {
+            let mut input: MoveTaskInput =
+                serde_json::from_str(&item.payload_json).map_err(to_message)?;
+            if let Some(remote_id) = id_map.get(&input.task_id).cloned() {
+                input.task_id = remote_id;
+            }
+            let remote = retry_auth_once(state, || {
+                google_tasks::google_move_task(app.clone(), state.clone(), input.clone())
+            })?;
+            upsert_task(conn, &remote)?;
+        }
+        _ => {}
+    }
     Ok(())
 }
 
@@ -346,6 +381,12 @@ fn migrate(conn: &Connection) -> Result<(), String> {
           value TEXT NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS app_settings (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS pending_queue (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           operation TEXT NOT NULL,
@@ -355,13 +396,20 @@ fn migrate(conn: &Connection) -> Result<(), String> {
           payload_json TEXT NOT NULL,
           created_at TEXT NOT NULL,
           attempt_count INTEGER NOT NULL DEFAULT 0,
-          last_error TEXT
+          last_error TEXT,
+          sync_status TEXT NOT NULL DEFAULT 'waiting',
+          synced_at TEXT
         );
         "#,
     )
     .map_err(to_message)?;
 
     let _ = conn.execute("ALTER TABLE tasks ADD COLUMN completed_at TEXT", []);
+    let _ = conn.execute(
+        "ALTER TABLE pending_queue ADD COLUMN sync_status TEXT NOT NULL DEFAULT 'waiting'",
+        [],
+    );
+    let _ = conn.execute("ALTER TABLE pending_queue ADD COLUMN synced_at TEXT", []);
     Ok(())
 }
 
@@ -370,7 +418,11 @@ fn read_cached_snapshot(conn: &Connection, offline: bool) -> Result<CachedSnapsh
     let tasks = read_tasks(conn)?;
     let last_synced_at = get_meta(conn, "lastSyncedAt")?;
     let pending_count = conn
-        .query_row("SELECT COUNT(*) FROM pending_queue", [], |row| row.get(0))
+        .query_row(
+            "SELECT COUNT(*) FROM pending_queue WHERE sync_status <> 'completed'",
+            [],
+            |row| row.get(0),
+        )
         .map_err(to_message)?;
 
     Ok(CachedSnapshot {
@@ -380,6 +432,37 @@ fn read_cached_snapshot(conn: &Connection, offline: bool) -> Result<CachedSnapsh
         pending_count,
         offline,
     })
+}
+
+fn read_app_settings(conn: &Connection) -> Result<HashMap<String, String>, String> {
+    let mut stmt = conn
+        .prepare("SELECT key, value FROM app_settings")
+        .map_err(to_message)?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
+        .map_err(to_message)?;
+    rows.collect::<Result<HashMap<_, _>, _>>()
+        .map_err(to_message)
+}
+
+fn set_app_setting(conn: &Connection, key: &str, value: Option<&str>) -> Result<(), String> {
+    if let Some(value) = value {
+        conn.execute(
+            "INSERT INTO app_settings (key, value, updated_at)
+             VALUES (?1, ?2, ?3)
+             ON CONFLICT(key) DO UPDATE SET
+               value = excluded.value,
+               updated_at = excluded.updated_at",
+            params![key, value, now_string()],
+        )
+        .map_err(to_message)?;
+    } else {
+        conn.execute("DELETE FROM app_settings WHERE key = ?1", params![key])
+            .map_err(to_message)?;
+    }
+    Ok(())
 }
 
 fn read_task_lists(conn: &Connection) -> Result<Vec<GoogleTaskListDto>, String> {
@@ -579,8 +662,8 @@ fn enqueue_pending(
 ) -> Result<(), String> {
     conn.execute(
         "INSERT INTO pending_queue
-         (operation, local_id, task_list_id, task_id, payload_json, created_at, attempt_count)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0)",
+         (operation, local_id, task_list_id, task_id, payload_json, created_at, attempt_count, sync_status)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, 'waiting')",
         params![
             operation,
             local_id,
@@ -597,8 +680,10 @@ fn enqueue_pending(
 fn pending_items(conn: &Connection) -> Result<Vec<PendingItem>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT id, operation, local_id, task_list_id, task_id, payload_json
-             FROM pending_queue ORDER BY id ASC",
+            "SELECT id, operation, local_id, task_list_id, task_id, payload_json, sync_status
+             FROM pending_queue
+             WHERE sync_status <> 'completed'
+             ORDER BY id ASC",
         )
         .map_err(to_message)?;
     let rows = stmt
@@ -610,16 +695,55 @@ fn pending_items(conn: &Connection) -> Result<Vec<PendingItem>, String> {
                 task_list_id: row.get(3)?,
                 task_id: row.get(4)?,
                 payload_json: row.get(5)?,
+                sync_status: row.get(6)?,
             })
         })
         .map_err(to_message)?;
     rows.collect::<Result<Vec<_>, _>>().map_err(to_message)
 }
 
-fn delete_pending(conn: &Connection, id: i64) -> Result<(), String> {
-    conn.execute("DELETE FROM pending_queue WHERE id = ?1", params![id])
-        .map_err(to_message)?;
+fn mark_pending_syncing(conn: &Connection, id: i64) -> Result<(), String> {
+    conn.execute(
+        "UPDATE pending_queue
+         SET sync_status = 'syncing', attempt_count = attempt_count + 1, last_error = NULL
+         WHERE id = ?1",
+        params![id],
+    )
+    .map_err(to_message)?;
     Ok(())
+}
+
+fn mark_pending_completed(conn: &Connection, id: i64) -> Result<(), String> {
+    conn.execute(
+        "UPDATE pending_queue
+         SET sync_status = 'completed', synced_at = ?2, last_error = NULL
+         WHERE id = ?1",
+        params![id, now_string()],
+    )
+    .map_err(to_message)?;
+    Ok(())
+}
+
+fn mark_pending_failed(conn: &Connection, id: i64, error: &str) -> Result<(), String> {
+    conn.execute(
+        "UPDATE pending_queue
+         SET sync_status = 'failed', last_error = ?2
+         WHERE id = ?1",
+        params![id, error],
+    )
+    .map_err(to_message)?;
+    Ok(())
+}
+
+#[cfg(test)]
+fn pending_statuses(conn: &Connection) -> Result<Vec<String>, String> {
+    let mut stmt = conn
+        .prepare("SELECT sync_status FROM pending_queue ORDER BY id ASC")
+        .map_err(to_message)?;
+    let rows = stmt
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(to_message)?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(to_message)
 }
 
 fn get_meta(conn: &Connection, key: &str) -> Result<Option<String>, String> {
@@ -718,12 +842,30 @@ mod tests {
         let conn = open_database_at(temp_dir.path()).expect("打开测试数据库失败");
         let count: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('task_lists', 'tasks', 'sync_meta', 'pending_queue')",
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('task_lists', 'tasks', 'sync_meta', 'app_settings', 'pending_queue')",
                 [],
                 |row| row.get(0),
             )
             .expect("读取表数量失败");
-        assert_eq!(count, 4);
+        assert_eq!(count, 5);
+    }
+
+    #[test]
+    fn app_settings_round_trip() {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        let conn = open_database_at(temp_dir.path()).expect("open test database");
+
+        set_app_setting(&conn, "googleTodoListColors", Some(r#"{"list":2}"#))
+            .expect("write setting");
+        let settings = read_app_settings(&conn).expect("read settings");
+        assert_eq!(
+            settings.get("googleTodoListColors").map(String::as_str),
+            Some(r#"{"list":2}"#),
+        );
+
+        set_app_setting(&conn, "googleTodoListColors", None).expect("delete setting");
+        let settings = read_app_settings(&conn).expect("read settings");
+        assert!(!settings.contains_key("googleTodoListColors"));
     }
 
     #[test]
@@ -769,6 +911,46 @@ mod tests {
         assert_eq!(snapshot.tasks.len(), 1);
         assert_eq!(snapshot.pending_count, 1);
         assert!(snapshot.offline);
+    }
+
+    #[test]
+    fn pending_queue_records_sync_status_and_counts_only_unfinished_items() {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        let conn = open_database_at(temp_dir.path()).expect("open test database");
+
+        enqueue_pending(
+            &conn,
+            "delete_task",
+            None,
+            "list-1",
+            Some("task-1"),
+            &Value::Null,
+        )
+        .expect("enqueue first item");
+        enqueue_pending(
+            &conn,
+            "delete_task",
+            None,
+            "list-1",
+            Some("task-2"),
+            &Value::Null,
+        )
+        .expect("enqueue second item");
+
+        let statuses = pending_statuses(&conn).expect("read statuses");
+        assert_eq!(statuses, vec!["waiting".to_string(), "waiting".to_string()]);
+
+        mark_pending_syncing(&conn, 1).expect("mark syncing");
+        mark_pending_completed(&conn, 1).expect("mark completed");
+
+        let statuses = pending_statuses(&conn).expect("read statuses");
+        assert_eq!(
+            statuses,
+            vec!["completed".to_string(), "waiting".to_string()]
+        );
+
+        let snapshot = read_cached_snapshot(&conn, false).expect("read snapshot");
+        assert_eq!(snapshot.pending_count, 1);
     }
 
     #[test]

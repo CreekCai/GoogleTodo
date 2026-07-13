@@ -22,6 +22,9 @@ export type SyncResult = {
 };
 
 export const syncApi = {
+  appSettings: () => invoke<Record<string, string>>("sync_app_settings"),
+  setAppSetting: (key: string, value: string | null) =>
+    invoke<void>("sync_set_app_setting", { key, value }),
   cachedSnapshot: () => invoke<CachedSnapshot>("sync_cached_snapshot"),
   syncNow: () => invoke<SyncResult>("sync_google_now"),
   createTask: (input: CreateTaskInput) => invoke<GoogleTaskDto>("sync_create_task", { input }),
