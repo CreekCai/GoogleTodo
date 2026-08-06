@@ -3013,7 +3013,7 @@ export default function App() {
           userPicture={authStatus?.signed_in ? authStatus.user_picture ?? "" : ""}
           listColorMap={listColorMap}
           listCustomColorMap={listCustomColorMap}
-          syncState={googleSyncing || pendingCount > 0 ? "syncing" : lastGoogleError ? "error" : offlineMode ? "offline" : "online"}
+          syncState={googleSyncing ? "syncing" : lastGoogleError ? "error" : offlineMode ? "offline" : "online"}
           syncMessage={syncMessage}
           syncQueueCount={pendingCount}
           onSearchChange={setSearchValue}
@@ -3021,7 +3021,6 @@ export default function App() {
           onSelectSmartView={selectSmartView}
           onCreateList={() => setManageListsOpen(true)}
           onAccountClick={() => setSettingsOpen(true)}
-          onSync={() => void refreshGoogleWorkspaceData(activeListId)}
           onUtilityView={(view) => {
             setSelectedTaskId("");
             setSelectedCalendarEventId("");
@@ -3246,9 +3245,12 @@ export default function App() {
             <SyncStatusWorkspace
               snapshot={syncQueue}
               loading={syncQueueLoading}
+              syncing={googleSyncing}
               error={syncQueueError}
               language={language}
-              onRefresh={() => void refreshSyncQueueStatus(true)}
+              onSync={() => {
+                void refreshGoogleWorkspaceData(activeListId).then(() => refreshSyncQueueStatus(true));
+              }}
             />
           ) : null}
 
@@ -3395,7 +3397,6 @@ type DesignSidebarProps = {
   onSelectSmartView: (view: SmartView) => void;
   onCreateList: () => void;
   onAccountClick: () => void;
-  onSync: () => void;
   onUtilityView: (view: WorkspaceView) => void;
   onToggleCollapsed: () => void;
 };
@@ -3426,7 +3427,6 @@ function DesignSidebar({
   onSelectSmartView,
   onCreateList,
   onAccountClick,
-  onSync,
   onUtilityView,
   onToggleCollapsed,
 }: DesignSidebarProps) {
@@ -3617,23 +3617,16 @@ function DesignSidebar({
             activeView === "sync-status" && "bg-surface-card text-ink shadow-subtle dark:bg-surface-dark dark:text-on-dark",
           )}
           onClick={() => onUtilityView("sync-status")}
-          title={uiText(language, "Sync status", "同步状态")}
+          title={`${uiText(language, "Sync status", "同步状态")} · ${syncMessage}`}
         >
-          <RefreshCw size={19} className={syncState === "syncing" ? "animate-spin" : ""} />
+          <SyncIcon size={19} className={cn(syncClass, syncState === "syncing" && "animate-spin")} />
           {!collapsed ? <span className="min-w-0 flex-1 text-left">{uiText(language, "Sync Status", "同步状态")}</span> : null}
           {!collapsed && syncQueueCount > 0 ? (
             <span className="rounded-full bg-warning/15 px-xs py-xxs text-caption font-semibold text-warning">{syncQueueCount}</span>
           ) : null}
           {collapsed && syncQueueCount > 0 ? <CollapsedCountBadge count={syncQueueCount} active={activeView === "sync-status"} /> : null}
         </button>
-        <div className={cn("mt-sm flex items-center", collapsed ? "flex-col gap-xs" : "justify-between")}>
-          <button
-            className={cn("app-focus-ring grid h-9 w-9 place-items-center rounded-lg transition-colors hover:bg-surface-card", syncClass)}
-            onClick={onSync}
-            title={syncMessage}
-          >
-            <SyncIcon size={19} className={syncState === "syncing" ? "animate-spin" : ""} />
-          </button>
+        <div className={cn("mt-sm flex items-center", collapsed ? "justify-center" : "justify-end")}>
           <button
             className="app-focus-ring grid h-9 w-9 place-items-center rounded-lg text-muted transition-colors hover:bg-surface-card"
             onClick={onToggleCollapsed}
@@ -5377,12 +5370,13 @@ function UtilityWorkspace({ title, description, items, emptyText, language, sele
 type SyncStatusWorkspaceProps = {
   snapshot: SyncQueueSnapshot | null;
   loading: boolean;
+  syncing: boolean;
   error: string;
   language: LanguageMode;
-  onRefresh: () => void;
+  onSync: () => void;
 };
 
-function SyncStatusWorkspace({ snapshot, loading, error, language, onRefresh }: SyncStatusWorkspaceProps) {
+function SyncStatusWorkspace({ snapshot, loading, syncing, error, language, onSync }: SyncStatusWorkspaceProps) {
   const statusMeta = {
     syncing: {
       label: uiText(language, "Syncing", "同步中"),
@@ -5429,9 +5423,9 @@ function SyncStatusWorkspace({ snapshot, loading, error, language, onRefresh }: 
             {uiText(language, "Inspect the task queue and see what is slowing down synchronization.", "查看任务同步队列，并定位同步耗时较长的具体原因。")}
           </p>
         </div>
-        <Button variant="secondary" disabled={loading} onClick={onRefresh}>
-          <RefreshCw size={17} className={loading ? "animate-spin" : ""} />
-          {uiText(language, "Refresh", "刷新")}
+        <Button variant="secondary" disabled={syncing} onClick={onSync}>
+          <RefreshCw size={17} className={syncing ? "animate-spin text-warning" : ""} />
+          {syncing ? uiText(language, "Syncing...", "同步中...") : uiText(language, "Refresh & Sync", "刷新同步")}
         </Button>
       </div>
 
