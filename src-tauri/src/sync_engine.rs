@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     fs,
     path::Path,
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use rand::{distributions::Alphanumeric, Rng};
@@ -32,6 +32,36 @@ pub struct SyncResult {
     pub status: String,
     pub message: String,
     pub snapshot: CachedSnapshot,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ArchiveCleanupResult {
+    pub deleted_count: usize,
+    pub cutoff: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SyncQueueItem {
+    pub id: i64,
+    pub operation: String,
+    pub task_title: String,
+    pub task_list_id: String,
+    pub task_id: Option<String>,
+    pub sync_status: String,
+    pub created_at: String,
+    pub synced_at: Option<String>,
+    pub attempt_count: i64,
+    pub last_error: Option<String>,
+    pub queue_position: Option<usize>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SyncQueueSnapshot {
+    pub items: Vec<SyncQueueItem>,
+    pub waiting_count: i64,
+    pub syncing_count: i64,
+    pub completed_count: i64,
+    pub failed_count: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -71,6 +101,44 @@ pub async fn sync_set_app_setting(
     tauri::async_runtime::spawn_blocking(move || {
         let conn = open_app_database(&app)?;
         set_app_setting(&conn, &key, value.as_deref())
+    })
+    .await
+    .map_err(to_message)?
+}
+
+#[tauri::command]
+pub async fn sync_queue_status(app: AppHandle) -> Result<SyncQueueSnapshot, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let conn = open_app_database(&app)?;
+        read_sync_queue_snapshot(&conn)
+    })
+    .await
+    .map_err(to_message)?
+}
+
+#[tauri::command]
+pub async fn sync_purge_archived_tasks(
+    app: AppHandle,
+    older_than_days: u32,
+) -> Result<ArchiveCleanupResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        if older_than_days != 7 && older_than_days != 30 {
+            return Err("Archive cleanup only supports 7 or 30 days".to_string());
+        }
+        let conn = open_app_database(&app)?;
+        let cutoff = SystemTime::now()
+            .checked_sub(Duration::from_secs(u64::from(older_than_days) * 86_400))
+            .ok_or_else(|| "Could not calculate archive cleanup cutoff".to_string())?
+            .duration_since(UNIX_EPOCH)
+            .map_err(to_message)?
+            .as_secs();
+        let deleted_count = purge_archived_tasks_before(&conn, cutoff)?;
+        conn.execute_batch("PRAGMA optimize; VACUUM;")
+            .map_err(to_message)?;
+        Ok(ArchiveCleanupResult {
+            deleted_count,
+            cutoff: cutoff.to_string(),
+        })
     })
     .await
     .map_err(to_message)?
@@ -434,6 +502,135 @@ fn read_cached_snapshot(conn: &Connection, offline: bool) -> Result<CachedSnapsh
     })
 }
 
+fn read_sync_queue_snapshot(conn: &Connection) -> Result<SyncQueueSnapshot, String> {
+    let count_status = |status: &str| -> Result<i64, String> {
+        conn.query_row(
+            "SELECT COUNT(*) FROM pending_queue WHERE sync_status = ?1",
+            params![status],
+            |row| row.get(0),
+        )
+        .map_err(to_message)
+    };
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, operation, local_id, task_list_id, task_id, payload_json,
+                    created_at, attempt_count, last_error, sync_status, synced_at
+             FROM pending_queue
+             ORDER BY
+               CASE sync_status
+                 WHEN 'syncing' THEN 0
+                 WHEN 'waiting' THEN 1
+                 WHEN 'failed' THEN 2
+                 ELSE 3
+               END,
+               CASE WHEN sync_status = 'completed' THEN -id ELSE id END ASC
+             LIMIT 250",
+        )
+        .map_err(to_message)?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, Option<String>>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, Option<String>>(4)?,
+                row.get::<_, String>(5)?,
+                row.get::<_, String>(6)?,
+                row.get::<_, i64>(7)?,
+                row.get::<_, Option<String>>(8)?,
+                row.get::<_, String>(9)?,
+                row.get::<_, Option<String>>(10)?,
+            ))
+        })
+        .map_err(to_message)?;
+
+    let mut waiting_position = 0usize;
+    let mut items = Vec::new();
+    for row in rows {
+        let (
+            id,
+            operation,
+            local_id,
+            task_list_id,
+            task_id,
+            payload_json,
+            created_at,
+            attempt_count,
+            last_error,
+            sync_status,
+            synced_at,
+        ) = row.map_err(to_message)?;
+        let lookup_id = task_id.as_deref().or(local_id.as_deref());
+        let cached_title = lookup_id
+            .map(|id| {
+                conn.query_row(
+                    "SELECT title FROM tasks WHERE id = ?1",
+                    params![id],
+                    |task_row| task_row.get::<_, String>(0),
+                )
+                .optional()
+                .map_err(to_message)
+            })
+            .transpose()?
+            .flatten();
+        let payload_title = serde_json::from_str::<Value>(&payload_json)
+            .ok()
+            .and_then(|value| value.get("title").and_then(Value::as_str).map(str::to_string));
+        let task_title = payload_title
+            .or(cached_title)
+            .or_else(|| lookup_id.map(str::to_string))
+            .unwrap_or_else(|| operation.clone());
+        let queue_position = if sync_status == "waiting" {
+            waiting_position += 1;
+            Some(waiting_position)
+        } else {
+            None
+        };
+        items.push(SyncQueueItem {
+            id,
+            operation,
+            task_title,
+            task_list_id,
+            task_id: task_id.or(local_id),
+            sync_status,
+            created_at,
+            synced_at,
+            attempt_count,
+            last_error,
+            queue_position,
+        });
+    }
+
+    Ok(SyncQueueSnapshot {
+        items,
+        waiting_count: count_status("waiting")?,
+        syncing_count: count_status("syncing")?,
+        completed_count: count_status("completed")?,
+        failed_count: count_status("failed")?,
+    })
+}
+
+fn purge_archived_tasks_before(conn: &Connection, cutoff: u64) -> Result<usize, String> {
+    let previous_cutoff = get_meta(conn, "archivePurgedBefore")?
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(0);
+    let effective_cutoff = previous_cutoff.max(cutoff);
+    set_meta(conn, "archivePurgedBefore", &effective_cutoff.to_string())?;
+    conn.execute(
+        "DELETE FROM tasks
+         WHERE completed = 1
+           AND completed_at IS NOT NULL
+           AND CASE
+             WHEN completed_at NOT GLOB '*[^0-9]*' THEN CAST(completed_at AS INTEGER)
+             ELSE CAST(strftime('%s', completed_at) AS INTEGER)
+           END <= ?1",
+        params![effective_cutoff],
+    )
+    .map_err(to_message)
+}
+
 fn read_app_settings(conn: &Connection) -> Result<HashMap<String, String>, String> {
     let mut stmt = conn
         .prepare("SELECT key, value FROM app_settings")
@@ -556,6 +753,27 @@ fn delete_tasks_not_in_lists(conn: &Connection, lists: &[GoogleTaskListDto]) -> 
 }
 
 fn upsert_task(conn: &Connection, task: &GoogleTaskDto) -> Result<(), String> {
+    if task.completed {
+        if let (Some(completed_at), Some(cutoff)) = (
+            task.completed_at.as_deref(),
+            get_meta(conn, "archivePurgedBefore")?.and_then(|value| value.parse::<u64>().ok()),
+        ) {
+            let completed_epoch = conn
+                .query_row(
+                    "SELECT CASE
+                       WHEN ?1 NOT GLOB '*[^0-9]*' THEN CAST(?1 AS INTEGER)
+                       ELSE CAST(strftime('%s', ?1) AS INTEGER)
+                     END",
+                    params![completed_at],
+                    |row| row.get::<_, Option<u64>>(0),
+                )
+                .map_err(to_message)?;
+            if completed_epoch.is_some_and(|value| value <= cutoff) {
+                delete_cached_task(conn, &task.id)?;
+                return Ok(());
+            }
+        }
+    }
     let raw_json = serde_json::to_string(task).map_err(to_message)?;
     conn.execute(
         "INSERT INTO tasks
@@ -951,6 +1169,78 @@ mod tests {
 
         let snapshot = read_cached_snapshot(&conn, false).expect("read snapshot");
         assert_eq!(snapshot.pending_count, 1);
+    }
+
+    #[test]
+    fn purge_archived_tasks_removes_old_rows_and_prevents_reimport() {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        let conn = open_database_at(temp_dir.path()).expect("open test database");
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("current unix time")
+            .as_secs();
+        let old_completed_at = (now - 8 * 86_400).to_string();
+        let recent_completed_at = (now - 2 * 86_400).to_string();
+        let old_task = GoogleTaskDto {
+            id: "old-task".to_string(),
+            task_list_id: "list-1".to_string(),
+            title: "Old completed task".to_string(),
+            notes: None,
+            due: None,
+            status: "completed".to_string(),
+            parent: None,
+            position: None,
+            completed: true,
+            completed_at: Some(old_completed_at),
+        };
+        let recent_task = GoogleTaskDto {
+            id: "recent-task".to_string(),
+            completed_at: Some(recent_completed_at),
+            ..old_task.clone()
+        };
+        upsert_task(&conn, &old_task).expect("insert old task");
+        upsert_task(&conn, &recent_task).expect("insert recent task");
+
+        let deleted = purge_archived_tasks_before(&conn, now - 7 * 86_400).expect("purge archive");
+        assert_eq!(deleted, 1);
+        assert_eq!(read_tasks(&conn).expect("read remaining tasks").len(), 1);
+
+        upsert_task(&conn, &old_task).expect("attempt reimport");
+        let remaining = read_tasks(&conn).expect("read filtered tasks");
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].id, "recent-task");
+    }
+
+    #[test]
+    fn sync_queue_snapshot_reports_waiting_and_completed_items() {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        let conn = open_database_at(temp_dir.path()).expect("open test database");
+        enqueue_pending(
+            &conn,
+            "create_task",
+            Some("local-1"),
+            "list-1",
+            None,
+            &serde_json::json!({ "title": "Queued task" }),
+        )
+        .expect("enqueue waiting item");
+        enqueue_pending(
+            &conn,
+            "delete_task",
+            None,
+            "list-1",
+            Some("task-2"),
+            &Value::Null,
+        )
+        .expect("enqueue completed item");
+        mark_pending_syncing(&conn, 2).expect("mark syncing");
+        mark_pending_completed(&conn, 2).expect("mark completed");
+
+        let snapshot = read_sync_queue_snapshot(&conn).expect("read sync queue");
+        assert_eq!(snapshot.waiting_count, 1);
+        assert_eq!(snapshot.completed_count, 1);
+        assert_eq!(snapshot.items[0].task_title, "Queued task");
+        assert_eq!(snapshot.items[0].queue_position, Some(1));
     }
 
     #[test]

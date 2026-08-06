@@ -43,7 +43,7 @@ import {
   type GoogleTaskDto,
   type GoogleTaskListDto,
 } from "./api/googleTasks";
-import { syncApi, type CachedSnapshot, type SyncResult } from "./api/sync";
+import { syncApi, type CachedSnapshot, type SyncQueueSnapshot, type SyncResult } from "./api/sync";
 import { SettingsModal } from "./components/modals/SettingsModal";
 import type { AutoSyncMode } from "./components/settings/SyncSettingsSection";
 import { Button } from "./components/ui/Button";
@@ -60,7 +60,7 @@ import type {
   ThemeMode,
 } from "./types";
 
-type WorkspaceView = "list" | "board" | "calendar" | "manage" | "archive" | "trash";
+type WorkspaceView = "list" | "board" | "calendar" | "manage" | "archive" | "trash" | "sync-status";
 type LanguageMode = "en" | "zh";
 type SaveState = "idle" | "saving" | "saved" | "error";
 type ListCustomColorMap = Record<string, string>;
@@ -1090,6 +1090,11 @@ export default function App() {
   const [usingGoogleData, setUsingGoogleData] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
+  const [syncQueue, setSyncQueue] = useState<SyncQueueSnapshot | null>(null);
+  const [syncQueueLoading, setSyncQueueLoading] = useState(false);
+  const [syncQueueError, setSyncQueueError] = useState("");
+  const [archiveCleanupDays, setArchiveCleanupDays] = useState<7 | 30 | null>(null);
+  const [archiveCleanupMessage, setArchiveCleanupMessage] = useState("");
   const [offlineMode, setOfflineMode] = useState(false);
   const [syncMessage, setSyncMessage] = useState("Local mode");
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
@@ -1763,6 +1768,80 @@ export default function App() {
       setGoogleSyncing(false);
     }
   };
+
+  const refreshSyncQueueStatus = async (showLoading = false) => {
+    if (showLoading) {
+      setSyncQueueLoading(true);
+    }
+    try {
+      const snapshot = await syncApi.queueStatus();
+      setSyncQueue(snapshot);
+      setSyncQueueError("");
+      setPendingCount(snapshot.waiting_count + snapshot.syncing_count + snapshot.failed_count);
+    } catch (error) {
+      setSyncQueueError(`${uiText(languageRef.current, "Could not load sync status: ", "无法读取同步状态：")}${String(error)}`);
+    } finally {
+      if (showLoading) {
+        setSyncQueueLoading(false);
+      }
+    }
+  };
+
+  const purgeArchivedTasks = async (days: 7 | 30) => {
+    const confirmed = window.confirm(
+      uiText(
+        language,
+        `Delete locally archived tasks completed more than ${days} days ago? They will remain in Google Tasks but will no longer be stored in this app.`,
+        `确认清理 ${days} 天以前完成的本地归档任务吗？这些任务仍会保留在 Google Tasks 中，但不会再存入本应用。`,
+      ),
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setArchiveCleanupDays(days);
+    setArchiveCleanupMessage(uiText(language, "Cleaning archived tasks...", "正在清理归档任务..."));
+    try {
+      const result = await syncApi.purgeArchivedTasks(days);
+      const cutoffMs = Number(result.cutoff) * 1000;
+      const isPurgedCompletion = (value?: string | null) => {
+        const parsed = parseActivityDate(value);
+        return parsed !== null && parsed.getTime() <= cutoffMs;
+      };
+      setTasks((current) => {
+        const next = current.filter((task) => !(task.completed && isPurgedCompletion(task.completedAt)));
+        setSelectedTaskId((selected) => (next.some((task) => task.id === selected) ? selected : ""));
+        return next;
+      });
+      setTaskActivityHistory((current) =>
+        current.filter((record) => record.action !== "completed" || !isPurgedCompletion(record.operatedAt)),
+      );
+      setArchiveCleanupMessage(
+        uiText(
+          language,
+          `${result.deleted_count} archived task${result.deleted_count === 1 ? "" : "s"} removed from local storage.`,
+          `已从本地存储清理 ${result.deleted_count} 个归档任务。`,
+        ),
+      );
+    } catch (error) {
+      setArchiveCleanupMessage(`${uiText(language, "Archive cleanup failed: ", "归档清理失败：")}${String(error)}`);
+    } finally {
+      setArchiveCleanupDays(null);
+    }
+  };
+
+  useEffect(() => {
+    if (activeView !== "sync-status") {
+      return;
+    }
+    void refreshSyncQueueStatus(true);
+    const timer = window.setInterval(() => {
+      void refreshSyncQueueStatus();
+    }, 1_000);
+    return () => window.clearInterval(timer);
+    // The status view intentionally polls while visible so an in-flight queue can be inspected.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeView]);
 
   const refreshCalendarEvents = async (monthValue = calendarMonthRef.current) => {
     if (!authStatus?.signed_in) {
@@ -2936,6 +3015,7 @@ export default function App() {
           listCustomColorMap={listCustomColorMap}
           syncState={googleSyncing || pendingCount > 0 ? "syncing" : lastGoogleError ? "error" : offlineMode ? "offline" : "online"}
           syncMessage={syncMessage}
+          syncQueueCount={pendingCount}
           onSearchChange={setSearchValue}
           onSelectList={selectList}
           onSelectSmartView={selectSmartView}
@@ -3123,6 +3203,27 @@ export default function App() {
                   setSelectedCalendarEventId("");
                   setSelectedTaskId(taskId);
                 }}
+                actions={
+                  <div className="rounded-lg border border-hairline bg-surface-soft p-md dark:border-surface-dark-elevated dark:bg-surface-dark-elevated">
+                    <div className="text-title-md text-ink dark:text-on-dark">
+                      {uiText(language, "Clean local archive", "清理本地归档")}
+                    </div>
+                    <p className="mt-xxs text-body-sm text-muted dark:text-on-dark-soft">
+                      {uiText(language, "Remove old completed tasks from the local database without deleting them from Google Tasks.", "从本地数据库移除旧的已完成任务，不会删除 Google Tasks 云端任务。")}
+                    </p>
+                    <div className="mt-md flex flex-wrap items-center gap-sm">
+                      <Button variant="danger" disabled={archiveCleanupDays !== null || googleSyncing} onClick={() => void purgeArchivedTasks(7)}>
+                        <Trash2 size={17} />
+                        {archiveCleanupDays === 7 ? uiText(language, "Cleaning...", "清理中...") : uiText(language, "Delete older than 7 days", "删除 7 天以前")}
+                      </Button>
+                      <Button variant="danger" disabled={archiveCleanupDays !== null || googleSyncing} onClick={() => void purgeArchivedTasks(30)}>
+                        <Trash2 size={17} />
+                        {archiveCleanupDays === 30 ? uiText(language, "Cleaning...", "清理中...") : uiText(language, "Delete older than 30 days", "删除 30 天以前")}
+                      </Button>
+                      {archiveCleanupMessage ? <span className="text-body-sm text-muted dark:text-on-dark-soft">{archiveCleanupMessage}</span> : null}
+                    </div>
+                  </div>
+                }
               />
               {selectedTask ? (
                 <TaskDetailsPanel
@@ -3139,6 +3240,16 @@ export default function App() {
                 />
               ) : null}
             </div>
+          ) : null}
+
+          {activeView === "sync-status" ? (
+            <SyncStatusWorkspace
+              snapshot={syncQueue}
+              loading={syncQueueLoading}
+              error={syncQueueError}
+              language={language}
+              onRefresh={() => void refreshSyncQueueStatus(true)}
+            />
           ) : null}
 
           {activeView === "trash" ? (
@@ -3278,6 +3389,7 @@ type DesignSidebarProps = {
   listCustomColorMap: ListCustomColorMap;
   syncState: "online" | "offline" | "syncing" | "error";
   syncMessage: string;
+  syncQueueCount: number;
   onSearchChange: (value: string) => void;
   onSelectList: (listId: string) => void;
   onSelectSmartView: (view: SmartView) => void;
@@ -3308,6 +3420,7 @@ function DesignSidebar({
   listCustomColorMap,
   syncState,
   syncMessage,
+  syncQueueCount,
   onSearchChange,
   onSelectList,
   onSelectSmartView,
@@ -3496,6 +3609,22 @@ function DesignSidebar({
         >
           <Archive size={19} />
           {!collapsed ? <span>{uiText(language, "Archive / Trash", "归档 / 删除")}</span> : null}
+        </button>
+        <button
+          className={cn(
+            "app-focus-ring mt-xs flex h-10 w-full items-center rounded-lg text-body transition-colors hover:bg-surface-card dark:text-on-dark-soft dark:hover:bg-surface-dark",
+            collapsed ? "justify-center px-xs" : "gap-sm px-sm",
+            activeView === "sync-status" && "bg-surface-card text-ink shadow-subtle dark:bg-surface-dark dark:text-on-dark",
+          )}
+          onClick={() => onUtilityView("sync-status")}
+          title={uiText(language, "Sync status", "同步状态")}
+        >
+          <RefreshCw size={19} className={syncState === "syncing" ? "animate-spin" : ""} />
+          {!collapsed ? <span className="min-w-0 flex-1 text-left">{uiText(language, "Sync Status", "同步状态")}</span> : null}
+          {!collapsed && syncQueueCount > 0 ? (
+            <span className="rounded-full bg-warning/15 px-xs py-xxs text-caption font-semibold text-warning">{syncQueueCount}</span>
+          ) : null}
+          {collapsed && syncQueueCount > 0 ? <CollapsedCountBadge count={syncQueueCount} active={activeView === "sync-status"} /> : null}
         </button>
         <div className={cn("mt-sm flex items-center", collapsed ? "flex-col gap-xs" : "justify-between")}>
           <button
@@ -5111,6 +5240,7 @@ type UtilityWorkspaceProps = {
   language: LanguageMode;
   selectedTaskId: string;
   onSelectTask: (taskId: string) => void;
+  actions?: ReactNode;
 };
 
 function parseActivityDate(value?: string | null) {
@@ -5174,11 +5304,27 @@ function formatActivityTime(value: string, language: LanguageMode) {
   }).format(parsed);
 }
 
-function UtilityWorkspace({ title, description, items, emptyText, language, selectedTaskId, onSelectTask }: UtilityWorkspaceProps) {
+function formatSyncDuration(createdAt: string, syncedAt: string, language: LanguageMode) {
+  const created = parseActivityDate(createdAt);
+  const synced = parseActivityDate(syncedAt);
+  if (!created || !synced) {
+    return null;
+  }
+  const seconds = Math.max(0, Math.round((synced.getTime() - created.getTime()) / 1000));
+  if (seconds < 60) {
+    return uiText(language, `${seconds}s`, `${seconds} 秒`);
+  }
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return uiText(language, `${minutes}m ${remainingSeconds}s`, `${minutes} 分 ${remainingSeconds} 秒`);
+}
+
+function UtilityWorkspace({ title, description, items, emptyText, language, selectedTaskId, onSelectTask, actions }: UtilityWorkspaceProps) {
   return (
     <section className="min-h-0 flex-1 overflow-y-auto bg-canvas p-lg dark:bg-surface-dark">
       <h1 className="font-display text-display-md text-ink dark:text-on-dark">{uiDictionary[title] && language === "zh" ? uiDictionary[title] : title}</h1>
       <p className="mt-xs text-body-md text-muted">{uiDictionary[description] && language === "zh" ? uiDictionary[description] : description}</p>
+      {actions ? <div className="mt-lg max-w-3xl">{actions}</div> : null}
       <div className="mt-lg max-w-3xl space-y-sm">
         {items.length === 0 ? (
           <EmptyState
@@ -5222,6 +5368,137 @@ function UtilityWorkspace({ title, description, items, emptyText, language, sele
               </span>
             </button>
           ))
+        )}
+      </div>
+    </section>
+  );
+}
+
+type SyncStatusWorkspaceProps = {
+  snapshot: SyncQueueSnapshot | null;
+  loading: boolean;
+  error: string;
+  language: LanguageMode;
+  onRefresh: () => void;
+};
+
+function SyncStatusWorkspace({ snapshot, loading, error, language, onRefresh }: SyncStatusWorkspaceProps) {
+  const statusMeta = {
+    syncing: {
+      label: uiText(language, "Syncing", "同步中"),
+      icon: RefreshCw,
+      className: "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-400/30 dark:bg-blue-400/10 dark:text-blue-200",
+    },
+    waiting: {
+      label: uiText(language, "Waiting", "等待同步"),
+      icon: Clock3,
+      className: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-200",
+    },
+    completed: {
+      label: uiText(language, "Synced", "已同步"),
+      icon: CheckCircle2,
+      className: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-400/10 dark:text-emerald-200",
+    },
+    failed: {
+      label: uiText(language, "Failed", "同步失败"),
+      icon: X,
+      className: "border-red-200 bg-red-50 text-red-700 dark:border-red-400/30 dark:bg-red-400/10 dark:text-red-200",
+    },
+  } as const;
+  const operationLabels: Record<string, [string, string]> = {
+    create_task: ["Create task", "新建任务"],
+    update_task: ["Update task", "更新任务"],
+    delete_task: ["Delete task", "删除任务"],
+    move_task: ["Move task", "移动任务"],
+  };
+  const counts = snapshot
+    ? [
+        [uiText(language, "Syncing", "同步中"), snapshot.syncing_count, "text-primary"],
+        [uiText(language, "Waiting", "等待同步"), snapshot.waiting_count, "text-warning"],
+        [uiText(language, "Synced", "已同步"), snapshot.completed_count, "text-success"],
+        [uiText(language, "Failed", "同步失败"), snapshot.failed_count, "text-error"],
+      ] as const
+    : [];
+
+  return (
+    <section className="min-h-0 flex-1 overflow-y-auto bg-canvas p-lg dark:bg-surface-dark">
+      <div className="flex max-w-5xl items-start justify-between gap-lg">
+        <div>
+          <h1 className="font-display text-display-md text-ink dark:text-on-dark">{uiText(language, "Sync Status", "同步状态")}</h1>
+          <p className="mt-xs text-body-md text-muted dark:text-on-dark-soft">
+            {uiText(language, "Inspect the task queue and see what is slowing down synchronization.", "查看任务同步队列，并定位同步耗时较长的具体原因。")}
+          </p>
+        </div>
+        <Button variant="secondary" disabled={loading} onClick={onRefresh}>
+          <RefreshCw size={17} className={loading ? "animate-spin" : ""} />
+          {uiText(language, "Refresh", "刷新")}
+        </Button>
+      </div>
+
+      {error ? (
+        <div className="mt-lg max-w-5xl rounded-lg border border-red-200 bg-red-50 p-md text-body-sm text-error dark:border-red-400/30 dark:bg-red-400/10">{error}</div>
+      ) : null}
+
+      <div className="mt-lg grid max-w-5xl grid-cols-2 gap-sm lg:grid-cols-4">
+        {counts.map(([label, count, color]) => (
+          <div key={label} className="rounded-lg border border-hairline bg-surface p-md dark:border-surface-dark-elevated dark:bg-surface-dark-elevated">
+            <div className="text-caption font-semibold text-muted dark:text-on-dark-soft">{label}</div>
+            <div className={cn("mt-xs font-display text-display-sm", color)}>{count}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-lg max-w-5xl overflow-hidden rounded-lg border border-hairline bg-surface dark:border-surface-dark-elevated dark:bg-surface-dark-elevated">
+        <div className="border-b border-hairline px-md py-sm text-caption font-semibold text-muted dark:border-surface-dark dark:text-on-dark-soft">
+          {uiText(language, "Active items first · up to 250 recent records", "活动任务优先 · 最多显示最近 250 条记录")}
+        </div>
+        {!snapshot && loading ? (
+          <div className="grid min-h-40 place-items-center text-body-sm text-muted">
+            <RefreshCw size={20} className="mr-xs inline animate-spin" />
+            {uiText(language, "Loading sync queue...", "正在读取同步队列...")}
+          </div>
+        ) : snapshot?.items.length ? (
+          <div className="divide-y divide-hairline dark:divide-surface-dark">
+            {snapshot.items.map((item) => {
+              const meta = statusMeta[item.sync_status] ?? statusMeta.failed;
+              const StatusIcon = meta.icon;
+              const operation = operationLabels[item.operation];
+              return (
+                <div key={item.id} className="flex items-start gap-md px-md py-md">
+                  <span className={cn("mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full border", meta.className)}>
+                    <StatusIcon size={16} className={item.sync_status === "syncing" ? "animate-spin" : ""} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-xs">
+                      <span className="truncate text-title-md text-ink dark:text-on-dark">{item.task_title}</span>
+                      <Badge className={meta.className}>{meta.label}</Badge>
+                      {item.queue_position ? <Badge>#{item.queue_position}</Badge> : null}
+                    </div>
+                    <div className="mt-xxs text-caption text-muted dark:text-on-dark-soft">
+                      {operation ? uiText(language, operation[0], operation[1]) : item.operation}
+                      {" · "}
+                      {uiText(language, "Created", "加入队列")} {formatActivityTime(item.created_at, language)}
+                      {item.attempt_count > 0 ? ` · ${uiText(language, "Attempts", "尝试次数")} ${item.attempt_count}` : ""}
+                    </div>
+                    {item.last_error ? <p className="mt-xs break-words text-body-sm text-error">{item.last_error}</p> : null}
+                  </div>
+                  {item.synced_at ? (
+                    <span className="hidden shrink-0 text-right text-caption text-muted xl:block">
+                      <span className="block">{formatActivityTime(item.synced_at, language)}</span>
+                      <span className="mt-xxs block">{uiText(language, "Duration", "耗时")} {formatSyncDuration(item.created_at, item.synced_at, language)}</span>
+                    </span>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="p-lg">
+            <EmptyState
+              title={uiText(language, "No sync records", "暂无同步记录")}
+              description={uiText(language, "Task changes will appear here when they enter the sync queue.", "任务变更进入同步队列后会显示在这里。")}
+            />
+          </div>
         )}
       </div>
     </section>

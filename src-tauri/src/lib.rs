@@ -162,6 +162,8 @@ pub fn run() {
             sync_engine::sync_cached_snapshot,
             sync_engine::sync_google_now,
             sync_engine::sync_set_app_setting,
+            sync_engine::sync_queue_status,
+            sync_engine::sync_purge_archived_tasks,
             sync_engine::sync_create_task,
             sync_engine::sync_update_task,
             sync_engine::sync_delete_task,
