@@ -17,6 +17,7 @@ use crate::google_tasks::{
 };
 
 const DB_FILE_NAME: &str = "google_tasks_cache.sqlite3";
+const SYNC_RETRY_DELAYS_SECONDS: [u64; 3] = [1, 2, 4];
 
 #[derive(Debug, Serialize)]
 pub struct CachedSnapshot {
@@ -191,16 +192,19 @@ fn sync_create_task_blocking(
     input: CreateTaskInput,
 ) -> Result<GoogleTaskDto, String> {
     let conn = open_app_database(&app)?;
+    let transaction = conn.unchecked_transaction().map_err(to_message)?;
     let task = local_task_from_create(&input);
-    upsert_task(&conn, &task)?;
+    upsert_task(&transaction, &task)?;
     enqueue_pending(
-        &conn,
+        &transaction,
         "create_task",
         Some(&task.id),
         &input.task_list_id,
         None,
+        Some(&task.title),
         &serde_json::to_value(input.clone()).map_err(to_message)?,
     )?;
+    transaction.commit().map_err(to_message)?;
     Ok(task)
 }
 
@@ -219,15 +223,18 @@ fn sync_update_task_blocking(
     input: UpdateTaskInput,
 ) -> Result<GoogleTaskDto, String> {
     let conn = open_app_database(&app)?;
-    let task = update_cached_task(&conn, &input)?;
+    let transaction = conn.unchecked_transaction().map_err(to_message)?;
+    let task = update_cached_task(&transaction, &input)?;
     enqueue_pending(
-        &conn,
+        &transaction,
         "update_task",
         None,
         &input.task_list_id,
         Some(&input.task_id),
+        Some(&task.title),
         &serde_json::to_value(input.clone()).map_err(to_message)?,
     )?;
+    transaction.commit().map_err(to_message)?;
     Ok(task)
 }
 
@@ -250,31 +257,38 @@ fn sync_delete_task_blocking(
     task_id: String,
 ) -> Result<(), String> {
     let conn = open_app_database(&app)?;
-    delete_cached_task(&conn, &task_id)?;
+    let transaction = conn.unchecked_transaction().map_err(to_message)?;
+    let task_title = read_task(&transaction, &task_id)?.map(|task| task.title);
+    delete_cached_task(&transaction, &task_id)?;
     enqueue_pending(
-        &conn,
+        &transaction,
         "delete_task",
         None,
         &task_list_id,
         Some(&task_id),
+        task_title.as_deref(),
         &Value::Null,
-    )
+    )?;
+    transaction.commit().map_err(to_message)
 }
 
 #[tauri::command]
 pub async fn sync_move_task(app: AppHandle, input: MoveTaskInput) -> Result<GoogleTaskDto, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let conn = open_app_database(&app)?;
-        let task = read_task(&conn, &input.task_id)?
+        let transaction = conn.unchecked_transaction().map_err(to_message)?;
+        let task = read_task(&transaction, &input.task_id)?
             .ok_or_else(|| "Local cached task not found for move".to_string())?;
         enqueue_pending(
-            &conn,
+            &transaction,
             "move_task",
             None,
             &input.task_list_id,
             Some(&input.task_id),
+            Some(&task.title),
             &serde_json::to_value(input.clone()).map_err(to_message)?,
         )?;
+        transaction.commit().map_err(to_message)?;
         Ok(task)
     })
     .await
@@ -315,12 +329,30 @@ fn flush_pending_queue(
 
     for item in pending {
         let item_id = item.id;
-        mark_pending_syncing(conn, item_id)?;
-        if let Err(error) = process_pending_item(app, conn, state, item, &mut id_map) {
-            mark_pending_failed(conn, item_id, &error)?;
-            return Err(error);
+        let mut retry_index = 0;
+
+        loop {
+            mark_pending_syncing(conn, item_id)?;
+            match process_pending_item(app, conn, state, item.clone(), &mut id_map) {
+                Ok(()) => {
+                    mark_pending_completed(conn, item_id)?;
+                    break;
+                }
+                Err(error) => {
+                    let status = classify_google_error(&error);
+                    let retryable = matches!(status, "offline" | "error");
+                    if !retryable || retry_index >= SYNC_RETRY_DELAYS_SECONDS.len() {
+                        mark_pending_failed(conn, item_id, &error)?;
+                        return Err(error);
+                    }
+
+                    std::thread::sleep(Duration::from_secs(
+                        SYNC_RETRY_DELAYS_SECONDS[retry_index],
+                    ));
+                    retry_index += 1;
+                }
+            }
         }
-        mark_pending_completed(conn, item_id)?;
     }
 
     Ok(())
@@ -413,6 +445,8 @@ fn open_app_database(app: &AppHandle) -> Result<Connection, String> {
 fn open_database_at(dir: &Path) -> Result<Connection, String> {
     fs::create_dir_all(dir).map_err(to_message)?;
     let conn = Connection::open(dir.join(DB_FILE_NAME)).map_err(to_message)?;
+    conn.busy_timeout(Duration::from_secs(5))
+        .map_err(to_message)?;
     migrate(&conn)?;
     Ok(conn)
 }
@@ -461,6 +495,7 @@ fn migrate(conn: &Connection) -> Result<(), String> {
           local_id TEXT,
           task_list_id TEXT NOT NULL,
           task_id TEXT,
+          task_title TEXT,
           payload_json TEXT NOT NULL,
           created_at TEXT NOT NULL,
           attempt_count INTEGER NOT NULL DEFAULT 0,
@@ -478,6 +513,17 @@ fn migrate(conn: &Connection) -> Result<(), String> {
         [],
     );
     let _ = conn.execute("ALTER TABLE pending_queue ADD COLUMN synced_at TEXT", []);
+    let _ = conn.execute("ALTER TABLE pending_queue ADD COLUMN task_title TEXT", []);
+    conn.execute(
+        "UPDATE pending_queue
+         SET task_title = (
+           SELECT title FROM tasks
+           WHERE tasks.id = COALESCE(pending_queue.task_id, pending_queue.local_id)
+         )
+         WHERE task_title IS NULL",
+        [],
+    )
+    .map_err(to_message)?;
     Ok(())
 }
 
@@ -514,7 +560,7 @@ fn read_sync_queue_snapshot(conn: &Connection) -> Result<SyncQueueSnapshot, Stri
 
     let mut stmt = conn
         .prepare(
-            "SELECT id, operation, local_id, task_list_id, task_id, payload_json,
+            "SELECT id, operation, local_id, task_list_id, task_id, task_title, payload_json,
                     created_at, attempt_count, last_error, sync_status, synced_at
              FROM pending_queue
              ORDER BY
@@ -536,12 +582,13 @@ fn read_sync_queue_snapshot(conn: &Connection) -> Result<SyncQueueSnapshot, Stri
                 row.get::<_, Option<String>>(2)?,
                 row.get::<_, String>(3)?,
                 row.get::<_, Option<String>>(4)?,
-                row.get::<_, String>(5)?,
+                row.get::<_, Option<String>>(5)?,
                 row.get::<_, String>(6)?,
-                row.get::<_, i64>(7)?,
-                row.get::<_, Option<String>>(8)?,
-                row.get::<_, String>(9)?,
-                row.get::<_, Option<String>>(10)?,
+                row.get::<_, String>(7)?,
+                row.get::<_, i64>(8)?,
+                row.get::<_, Option<String>>(9)?,
+                row.get::<_, String>(10)?,
+                row.get::<_, Option<String>>(11)?,
             ))
         })
         .map_err(to_message)?;
@@ -555,6 +602,7 @@ fn read_sync_queue_snapshot(conn: &Connection) -> Result<SyncQueueSnapshot, Stri
             local_id,
             task_list_id,
             task_id,
+            stored_task_title,
             payload_json,
             created_at,
             attempt_count,
@@ -578,9 +626,10 @@ fn read_sync_queue_snapshot(conn: &Connection) -> Result<SyncQueueSnapshot, Stri
         let payload_title = serde_json::from_str::<Value>(&payload_json)
             .ok()
             .and_then(|value| value.get("title").and_then(Value::as_str).map(str::to_string));
-        let task_title = payload_title
+        let task_title = stored_task_title
+            .filter(|title| !title.trim().is_empty())
+            .or(payload_title)
             .or(cached_title)
-            .or_else(|| lookup_id.map(str::to_string))
             .unwrap_or_else(|| operation.clone());
         let queue_position = if sync_status == "waiting" {
             waiting_position += 1;
@@ -876,17 +925,19 @@ fn enqueue_pending(
     local_id: Option<&str>,
     task_list_id: &str,
     task_id: Option<&str>,
+    task_title: Option<&str>,
     payload: &Value,
 ) -> Result<(), String> {
     conn.execute(
         "INSERT INTO pending_queue
-         (operation, local_id, task_list_id, task_id, payload_json, created_at, attempt_count, sync_status)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, 'waiting')",
+         (operation, local_id, task_list_id, task_id, task_title, payload_json, created_at, attempt_count, sync_status)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0, 'waiting')",
         params![
             operation,
             local_id,
             task_list_id,
             task_id,
+            task_title,
             payload.to_string(),
             now_string()
         ],
@@ -1120,6 +1171,7 @@ mod tests {
             None,
             "list-1",
             Some("task-1"),
+            Some("Task 1"),
             &Value::Null,
         )
         .expect("写入 pending 失败");
@@ -1142,6 +1194,7 @@ mod tests {
             None,
             "list-1",
             Some("task-1"),
+            Some("Task 1"),
             &Value::Null,
         )
         .expect("enqueue first item");
@@ -1151,6 +1204,7 @@ mod tests {
             None,
             "list-1",
             Some("task-2"),
+            Some("Task 2"),
             &Value::Null,
         )
         .expect("enqueue second item");
@@ -1221,7 +1275,8 @@ mod tests {
             Some("local-1"),
             "list-1",
             None,
-            &serde_json::json!({ "title": "Queued task" }),
+            Some("Queued task"),
+            &serde_json::json!({ "due": "2026-08-08T00:00:00.000Z" }),
         )
         .expect("enqueue waiting item");
         enqueue_pending(
@@ -1230,6 +1285,7 @@ mod tests {
             None,
             "list-1",
             Some("task-2"),
+            Some("Task 2"),
             &Value::Null,
         )
         .expect("enqueue completed item");

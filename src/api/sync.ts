@@ -48,6 +48,17 @@ export type SyncQueueSnapshot = {
   failed_count: number;
 };
 
+let taskMutationQueue: Promise<void> = Promise.resolve();
+
+function enqueueTaskMutation<T>(mutation: () => Promise<T>): Promise<T> {
+  const result = taskMutationQueue.then(mutation);
+  taskMutationQueue = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  return result;
+}
+
 export const syncApi = {
   appSettings: () => invoke<Record<string, string>>("sync_app_settings"),
   setAppSetting: (key: string, value: string | null) =>
@@ -56,10 +67,13 @@ export const syncApi = {
   queueStatus: () => invoke<SyncQueueSnapshot>("sync_queue_status"),
   purgeArchivedTasks: (olderThanDays: 7 | 30) =>
     invoke<ArchiveCleanupResult>("sync_purge_archived_tasks", { olderThanDays }),
-  syncNow: () => invoke<SyncResult>("sync_google_now"),
-  createTask: (input: CreateTaskInput) => invoke<GoogleTaskDto>("sync_create_task", { input }),
-  updateTask: (input: UpdateTaskInput) => invoke<GoogleTaskDto>("sync_update_task", { input }),
+  syncNow: () => taskMutationQueue.then(() => invoke<SyncResult>("sync_google_now")),
+  createTask: (input: CreateTaskInput) =>
+    enqueueTaskMutation(() => invoke<GoogleTaskDto>("sync_create_task", { input })),
+  updateTask: (input: UpdateTaskInput) =>
+    enqueueTaskMutation(() => invoke<GoogleTaskDto>("sync_update_task", { input })),
   deleteTask: (taskListId: string, taskId: string) =>
-    invoke<void>("sync_delete_task", { taskListId, taskId }),
-  moveTask: (input: MoveTaskInput) => invoke<GoogleTaskDto>("sync_move_task", { input }),
+    enqueueTaskMutation(() => invoke<void>("sync_delete_task", { taskListId, taskId })),
+  moveTask: (input: MoveTaskInput) =>
+    enqueueTaskMutation(() => invoke<GoogleTaskDto>("sync_move_task", { input })),
 };

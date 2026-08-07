@@ -13,6 +13,7 @@ import {
   ChevronDown,
   ChevronRight,
   Circle,
+  CircleAlert,
   Clock3,
   Cloud,
   CloudOff,
@@ -1924,6 +1925,17 @@ export default function App() {
   };
 
   useEffect(() => {
+    if (!authStatus?.signed_in || pendingCount <= 0 || syncLoopBusyRef.current) {
+      return;
+    }
+
+    void refreshGoogleWorkspaceData(activeListIdRef.current);
+    // A newly queued task should start syncing immediately. A failed task keeps the
+    // same count, so it will not create an automatic retry loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authStatus?.signed_in, pendingCount]);
+
+  useEffect(() => {
     syncApi
       .cachedSnapshot()
       .then((snapshot) => applySnapshot(snapshot, uiText(language, "Loaded local cache", "已加载本地缓存")))
@@ -3437,7 +3449,7 @@ function DesignSidebar({
     { id: "all", label: smartViewTitle("all", language), icon: CheckCircle2 },
   ];
 
-  const SyncIcon = syncState === "offline" ? CloudOff : syncState === "syncing" ? RefreshCw : Cloud;
+  const SyncIcon = syncState === "error" ? CircleAlert : syncState === "offline" ? CloudOff : syncState === "syncing" ? RefreshCw : Cloud;
   const countableTasks = showCompleted ? tasks : tasks.filter((task) => !task.completed);
   const showCollapsedCountBadges = collapsed && showTaskCount && showCollapsedSidebarBadges;
   const listScrollRef = useRef<HTMLDivElement | null>(null);
@@ -5457,6 +5469,9 @@ function SyncStatusWorkspace({ snapshot, loading, syncing, error, language, onSy
               const meta = statusMeta[item.sync_status] ?? statusMeta.failed;
               const StatusIcon = meta.icon;
               const operation = operationLabels[item.operation];
+              const taskTitle = item.task_title === item.operation
+                ? uiText(language, "Task name unavailable", "任务名称不可用")
+                : item.task_title;
               return (
                 <div key={item.id} className="flex items-start gap-md px-md py-md">
                   <span className={cn("mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full border", meta.className)}>
@@ -5464,7 +5479,7 @@ function SyncStatusWorkspace({ snapshot, loading, syncing, error, language, onSy
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-xs">
-                      <span className="truncate text-title-md text-ink dark:text-on-dark">{item.task_title}</span>
+                      <span className="truncate text-title-md text-ink dark:text-on-dark">{taskTitle}</span>
                       <Badge className={meta.className}>{meta.label}</Badge>
                       {item.queue_position ? <Badge>#{item.queue_position}</Badge> : null}
                     </div>
