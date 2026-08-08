@@ -1859,16 +1859,16 @@ export default function App() {
       if (await handleInvalidGoogleAuth(error)) {
         return;
       }
-      const message = String(error);
-      if (message.includes("403")) {
-        setSyncMessage(
-          uiText(
+      const detail = String(error);
+      const message = detail.includes("403")
+        ? uiText(
             languageRef.current,
             "Google Calendar sync needs additional permission. Please sign out and sign in again.",
             "Google Calendar 同步需要额外授权，请先退出登录再重新登录。",
-          ),
-        );
-      }
+          )
+        : `${uiText(languageRef.current, "Failed to load calendar events: ", "加载日历事件失败：")}${detail}`;
+      setSyncMessage(message);
+      setLastGoogleError(detail.includes("403") ? `${message} ${detail}` : message);
     }
   };
 
@@ -2970,7 +2970,10 @@ export default function App() {
       );
       setSyncMessage(uiText(language, "Proxy settings saved", "代理设置已保存"));
     } catch (error) {
-      setGoogleProxyMessage(`${uiText(language, "Save failed: ", "保存失败：")}${String(error)}`);
+      const message = `${uiText(language, "Proxy settings save failed: ", "代理设置保存失败：")}${String(error)}`;
+      setGoogleProxyMessage(message);
+      setSyncMessage(message);
+      setLastGoogleError(message);
     } finally {
       setGoogleProxySaving(false);
     }
@@ -3258,7 +3261,8 @@ export default function App() {
               snapshot={syncQueue}
               loading={syncQueueLoading}
               syncing={googleSyncing}
-              error={syncQueueError}
+              globalError={lastGoogleError}
+              queueError={syncQueueError}
               language={language}
               onSync={() => {
                 void refreshGoogleWorkspaceData(activeListId).then(() => refreshSyncQueueStatus(true));
@@ -5383,12 +5387,33 @@ type SyncStatusWorkspaceProps = {
   snapshot: SyncQueueSnapshot | null;
   loading: boolean;
   syncing: boolean;
-  error: string;
+  globalError: string;
+  queueError: string;
   language: LanguageMode;
   onSync: () => void;
 };
 
-function SyncStatusWorkspace({ snapshot, loading, syncing, error, language, onSync }: SyncStatusWorkspaceProps) {
+function syncErrorSuggestion(error: string, language: LanguageMode) {
+  const normalized = error.toLowerCase();
+  if (normalized.includes("invalid_grant") || normalized.includes("expired") || normalized.includes("401") || normalized.includes("登录已失效")) {
+    return uiText(language, "Sign out, sign in to Google again, then retry synchronization.", "请退出 Google 账号并重新登录，然后再次同步。");
+  }
+  if (normalized.includes("403") || normalized.includes("forbidden") || normalized.includes("permission") || normalized.includes("权限")) {
+    return uiText(language, "Reauthorize the Google account and confirm that Tasks and Calendar permissions are granted.", "请重新授权 Google 账号，并确认已授予 Tasks 和 Calendar 权限。");
+  }
+  if (normalized.includes("404") || normalized.includes("not found") || normalized.includes("不存在")) {
+    return uiText(language, "Refresh synchronization. If the error remains, confirm that the task or list still exists in Google.", "请刷新同步；若仍然失败，请确认对应任务或清单在 Google 中仍然存在。");
+  }
+  if (normalized.includes("network") || normalized.includes("offline") || normalized.includes("dns") || normalized.includes("timeout") || normalized.includes("connection") || normalized.includes("proxy") || normalized.includes("网络") || normalized.includes("连接") || normalized.includes("代理")) {
+    return uiText(language, "Check the network and proxy settings, then use Refresh & Sync after connectivity is restored.", "请检查网络和代理设置，恢复连接后点击“刷新同步”。");
+  }
+  if (normalized.includes("database") || normalized.includes("locked") || normalized.includes("sqlite") || normalized.includes("数据库")) {
+    return uiText(language, "Wait a moment and retry. If it persists, close duplicate app windows and restart the app.", "请稍候重试；若持续出现，请关闭重复运行的应用窗口并重新启动软件。");
+  }
+  return uiText(language, "Use Refresh & Sync to retry. If the error persists, check Google sign-in and proxy settings.", "请点击“刷新同步”重试；若持续失败，请检查 Google 登录状态和代理设置。");
+}
+
+function SyncStatusWorkspace({ snapshot, loading, syncing, globalError, queueError, language, onSync }: SyncStatusWorkspaceProps) {
   const statusMeta = {
     syncing: {
       label: uiText(language, "Syncing", "同步中"),
@@ -5425,6 +5450,9 @@ function SyncStatusWorkspace({ snapshot, loading, syncing, error, language, onSy
         [uiText(language, "Failed", "同步失败"), snapshot.failed_count, "text-error"],
       ] as const
     : [];
+  const errorEntries = [globalError, queueError].filter(
+    (message, index, messages): message is string => Boolean(message) && messages.indexOf(message) === index,
+  );
 
   return (
     <section className="min-h-0 flex-1 overflow-y-auto bg-canvas p-lg dark:bg-surface-dark">
@@ -5441,10 +5469,6 @@ function SyncStatusWorkspace({ snapshot, loading, syncing, error, language, onSy
         </Button>
       </div>
 
-      {error ? (
-        <div className="mt-lg max-w-5xl rounded-lg border border-red-200 bg-red-50 p-md text-body-sm text-error dark:border-red-400/30 dark:bg-red-400/10">{error}</div>
-      ) : null}
-
       <div className="mt-lg grid max-w-5xl grid-cols-2 gap-sm lg:grid-cols-4">
         {counts.map(([label, count, color]) => (
           <div key={label} className="rounded-lg border border-hairline bg-surface p-md dark:border-surface-dark-elevated dark:bg-surface-dark-elevated">
@@ -5453,6 +5477,31 @@ function SyncStatusWorkspace({ snapshot, loading, syncing, error, language, onSy
           </div>
         ))}
       </div>
+
+      {errorEntries.length > 0 ? (
+        <div role="alert" className="mt-lg max-w-5xl rounded-lg border border-red-200 bg-red-50 p-md dark:border-red-400/30 dark:bg-red-400/10">
+          <div className="flex items-start gap-sm">
+            <CircleAlert size={20} className="mt-xxs shrink-0 text-error" />
+            <div className="min-w-0 flex-1">
+              <div className="text-title-md text-error">{uiText(language, "Synchronization needs attention", "同步异常，需要处理")}</div>
+              <div className="mt-sm space-y-sm">
+                {errorEntries.map((message) => (
+                  <div key={message} className="rounded-md border border-red-200/80 bg-white/60 p-sm dark:border-red-400/20 dark:bg-surface-dark/40">
+                    <p className="break-words text-body-sm text-ink dark:text-on-dark">
+                      <span className="font-semibold">{uiText(language, "Reason: ", "错误原因：")}</span>
+                      {message}
+                    </p>
+                    <p className="mt-xs text-body-sm text-muted dark:text-on-dark-soft">
+                      <span className="font-semibold text-ink dark:text-on-dark">{uiText(language, "Suggested action: ", "处理建议：")}</span>
+                      {syncErrorSuggestion(message, language)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div className="mt-lg max-w-5xl overflow-hidden rounded-lg border border-hairline bg-surface dark:border-surface-dark-elevated dark:bg-surface-dark-elevated">
         <div className="border-b border-hairline px-md py-sm text-caption font-semibold text-muted dark:border-surface-dark dark:text-on-dark-soft">
