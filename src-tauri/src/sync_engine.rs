@@ -1,14 +1,16 @@
 use std::{
     collections::HashMap,
     fs,
+    io::Write,
     path::Path,
+    sync::Mutex,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use rand::{distributions::Alphanumeric, Rng};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use tauri::{AppHandle, Manager, State};
 
 use crate::google_tasks::{
@@ -18,6 +20,10 @@ use crate::google_tasks::{
 
 const DB_FILE_NAME: &str = "google_tasks_cache.sqlite3";
 const SYNC_RETRY_DELAYS_SECONDS: [u64; 3] = [1, 2, 4];
+const DIAGNOSTIC_LOG_FILE_NAME: &str = "google-todo-diagnostic.jsonl";
+const DIAGNOSTIC_LOG_ROTATED_FILE_NAME: &str = "google-todo-diagnostic.jsonl.1";
+const DIAGNOSTIC_LOG_MAX_BYTES: u64 = 5 * 1024 * 1024;
+static DIAGNOSTIC_LOG_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Debug, Serialize)]
 pub struct CachedSnapshot {
@@ -118,6 +124,33 @@ pub async fn sync_queue_status(app: AppHandle) -> Result<SyncQueueSnapshot, Stri
 }
 
 #[tauri::command]
+pub async fn sync_record_diagnostic_event(
+    app: AppHandle,
+    event: String,
+    details: Value,
+) -> Result<(), String> {
+    if event.is_empty()
+        || event.len() > 80
+        || !event
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '_' | '-'))
+    {
+        return Err("Invalid diagnostic event name".to_string());
+    }
+    append_diagnostic_log(&app, &event, details);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn sync_open_diagnostic_log_folder(app: AppHandle) -> Result<String, String> {
+    let dir = app.path().app_data_dir().map_err(to_message)?;
+    fs::create_dir_all(&dir).map_err(to_message)?;
+    append_diagnostic_log(&app, "diagnostic_log_folder_opened", Value::Null);
+    open::that(&dir).map_err(to_message)?;
+    Ok(dir.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
 pub async fn sync_purge_archived_tasks(
     app: AppHandle,
     older_than_days: u32,
@@ -158,6 +191,7 @@ pub async fn sync_google_now(app: AppHandle) -> Result<SyncResult, String> {
 }
 
 fn sync_google_now_blocking(app: AppHandle) -> Result<SyncResult, String> {
+    append_diagnostic_log(&app, "sync_started", Value::Null);
     let conn = open_app_database(&app)?;
     let state = app.state::<GoogleTasksState>();
     match run_full_sync(&app, &conn, &state) {
@@ -168,6 +202,11 @@ fn sync_google_now_blocking(app: AppHandle) -> Result<SyncResult, String> {
         }),
         Err(error) => {
             let status = classify_google_error(&error);
+            append_diagnostic_log(
+                &app,
+                "sync_failed",
+                json!({ "status": status, "error": error }),
+            );
             Ok(SyncResult {
                 message: user_message_for_status(&status, &error),
                 status: status.to_string(),
@@ -191,6 +230,16 @@ fn sync_create_task_blocking(
     app: AppHandle,
     input: CreateTaskInput,
 ) -> Result<GoogleTaskDto, String> {
+    append_diagnostic_log(
+        &app,
+        "task_mutation_received",
+        json!({
+            "operation": "create_task",
+            "task_list_id": input.task_list_id,
+            "task_title": input.title,
+            "due": input.due,
+        }),
+    );
     let conn = open_app_database(&app)?;
     let transaction = conn.unchecked_transaction().map_err(to_message)?;
     let task = local_task_from_create(&input);
@@ -205,6 +254,16 @@ fn sync_create_task_blocking(
         &serde_json::to_value(input.clone()).map_err(to_message)?,
     )?;
     transaction.commit().map_err(to_message)?;
+    append_diagnostic_log(
+        &app,
+        "task_enqueued",
+        json!({
+            "operation": "create_task",
+            "task_list_id": task.task_list_id,
+            "task_id": task.id,
+            "task_title": task.title,
+        }),
+    );
     Ok(task)
 }
 
@@ -222,6 +281,19 @@ fn sync_update_task_blocking(
     app: AppHandle,
     input: UpdateTaskInput,
 ) -> Result<GoogleTaskDto, String> {
+    let changed_fields = update_changed_fields(&input);
+    append_diagnostic_log(
+        &app,
+        "task_mutation_received",
+        json!({
+            "operation": "update_task",
+            "task_list_id": input.task_list_id,
+            "task_id": input.task_id,
+            "changed_fields": changed_fields,
+            "due": input.due,
+            "status": input.status,
+        }),
+    );
     let conn = open_app_database(&app)?;
     let transaction = conn.unchecked_transaction().map_err(to_message)?;
     let task = update_cached_task(&transaction, &input)?;
@@ -235,6 +307,17 @@ fn sync_update_task_blocking(
         &serde_json::to_value(input.clone()).map_err(to_message)?,
     )?;
     transaction.commit().map_err(to_message)?;
+    append_diagnostic_log(
+        &app,
+        "task_enqueued",
+        json!({
+            "operation": "update_task",
+            "task_list_id": task.task_list_id,
+            "task_id": task.id,
+            "task_title": task.title,
+            "changed_fields": changed_fields,
+        }),
+    );
     Ok(task)
 }
 
@@ -256,6 +339,15 @@ fn sync_delete_task_blocking(
     task_list_id: String,
     task_id: String,
 ) -> Result<(), String> {
+    append_diagnostic_log(
+        &app,
+        "task_mutation_received",
+        json!({
+            "operation": "delete_task",
+            "task_list_id": task_list_id,
+            "task_id": task_id,
+        }),
+    );
     let conn = open_app_database(&app)?;
     let transaction = conn.unchecked_transaction().map_err(to_message)?;
     let task_title = read_task(&transaction, &task_id)?.map(|task| task.title);
@@ -269,12 +361,32 @@ fn sync_delete_task_blocking(
         task_title.as_deref(),
         &Value::Null,
     )?;
-    transaction.commit().map_err(to_message)
+    transaction.commit().map_err(to_message)?;
+    append_diagnostic_log(
+        &app,
+        "task_enqueued",
+        json!({
+            "operation": "delete_task",
+            "task_list_id": task_list_id,
+            "task_id": task_id,
+            "task_title": task_title,
+        }),
+    );
+    Ok(())
 }
 
 #[tauri::command]
 pub async fn sync_move_task(app: AppHandle, input: MoveTaskInput) -> Result<GoogleTaskDto, String> {
     tauri::async_runtime::spawn_blocking(move || {
+        append_diagnostic_log(
+            &app,
+            "task_mutation_received",
+            json!({
+                "operation": "move_task",
+                "task_list_id": input.task_list_id,
+                "task_id": input.task_id,
+            }),
+        );
         let conn = open_app_database(&app)?;
         let transaction = conn.unchecked_transaction().map_err(to_message)?;
         let task = read_task(&transaction, &input.task_id)?
@@ -289,6 +401,16 @@ pub async fn sync_move_task(app: AppHandle, input: MoveTaskInput) -> Result<Goog
             &serde_json::to_value(input.clone()).map_err(to_message)?,
         )?;
         transaction.commit().map_err(to_message)?;
+        append_diagnostic_log(
+            &app,
+            "task_enqueued",
+            json!({
+                "operation": "move_task",
+                "task_list_id": input.task_list_id,
+                "task_id": input.task_id,
+                "task_title": task.title,
+            }),
+        );
         Ok(task)
     })
     .await
@@ -316,6 +438,11 @@ fn run_full_sync(
     }
     delete_tasks_not_in_lists(conn, &lists)?;
     set_meta(conn, "lastSyncedAt", &now_string())?;
+    append_diagnostic_log(
+        app,
+        "sync_completed",
+        json!({ "task_list_count": lists.len() }),
+    );
     Ok(())
 }
 
@@ -333,9 +460,30 @@ fn flush_pending_queue(
 
         loop {
             mark_pending_syncing(conn, item_id)?;
+            append_diagnostic_log(
+                app,
+                "queue_item_syncing",
+                json!({
+                    "queue_id": item_id,
+                    "operation": item.operation,
+                    "task_list_id": item.task_list_id,
+                    "task_id": item.task_id,
+                    "attempt": retry_index + 1,
+                }),
+            );
             match process_pending_item(app, conn, state, item.clone(), &mut id_map) {
                 Ok(()) => {
                     mark_pending_completed(conn, item_id)?;
+                    append_diagnostic_log(
+                        app,
+                        "queue_item_completed",
+                        json!({
+                            "queue_id": item_id,
+                            "operation": item.operation,
+                            "task_id": item.task_id,
+                            "attempts": retry_index + 1,
+                        }),
+                    );
                     break;
                 }
                 Err(error) => {
@@ -343,9 +491,34 @@ fn flush_pending_queue(
                     let retryable = matches!(status, "offline" | "error");
                     if !retryable || retry_index >= SYNC_RETRY_DELAYS_SECONDS.len() {
                         mark_pending_failed(conn, item_id, &error)?;
+                        append_diagnostic_log(
+                            app,
+                            "queue_item_failed",
+                            json!({
+                                "queue_id": item_id,
+                                "operation": item.operation,
+                                "task_id": item.task_id,
+                                "attempts": retry_index + 1,
+                                "status": status,
+                                "error": error,
+                            }),
+                        );
                         return Err(error);
                     }
 
+                    append_diagnostic_log(
+                        app,
+                        "queue_item_retry_scheduled",
+                        json!({
+                            "queue_id": item_id,
+                            "operation": item.operation,
+                            "task_id": item.task_id,
+                            "attempt": retry_index + 1,
+                            "retry_in_seconds": SYNC_RETRY_DELAYS_SECONDS[retry_index],
+                            "status": status,
+                            "error": error,
+                        }),
+                    );
                     std::thread::sleep(Duration::from_secs(
                         SYNC_RETRY_DELAYS_SECONDS[retry_index],
                     ));
@@ -434,6 +607,81 @@ fn retry_auth_once<T>(
             action()
         }
         Err(error) => Err(error),
+    }
+}
+
+fn update_changed_fields(input: &UpdateTaskInput) -> Vec<&'static str> {
+    let mut fields = Vec::new();
+    if input.title.is_some() {
+        fields.push("title");
+    }
+    if input.notes.is_some() {
+        fields.push("notes");
+    }
+    if input.due.is_some() {
+        fields.push("due");
+    }
+    if input.status.is_some() {
+        fields.push("status");
+    }
+    fields
+}
+
+fn sanitize_diagnostic_value(value: Value) -> Value {
+    match value {
+        Value::Object(object) => Value::Object(
+            object
+                .into_iter()
+                .filter_map(|(key, value)| {
+                    let normalized = key.to_ascii_lowercase();
+                    let sensitive = ["note", "token", "secret", "credential", "authorization"]
+                        .iter()
+                        .any(|fragment| normalized.contains(fragment));
+                    (!sensitive).then(|| (key, sanitize_diagnostic_value(value)))
+                })
+                .collect(),
+        ),
+        Value::Array(values) => Value::Array(
+            values
+                .into_iter()
+                .map(sanitize_diagnostic_value)
+                .collect(),
+        ),
+        Value::String(value) if value.len() > 2_000 => {
+            Value::String(format!("{}…", value.chars().take(2_000).collect::<String>()))
+        }
+        value => value,
+    }
+}
+
+fn append_diagnostic_log(app: &AppHandle, event: &str, details: Value) {
+    let Ok(_guard) = DIAGNOSTIC_LOG_LOCK.lock() else {
+        return;
+    };
+    let Ok(dir) = app.path().app_data_dir() else {
+        return;
+    };
+    if fs::create_dir_all(&dir).is_err() {
+        return;
+    }
+
+    let path = dir.join(DIAGNOSTIC_LOG_FILE_NAME);
+    if fs::metadata(&path)
+        .map(|metadata| metadata.len() >= DIAGNOSTIC_LOG_MAX_BYTES)
+        .unwrap_or(false)
+    {
+        let rotated_path = dir.join(DIAGNOSTIC_LOG_ROTATED_FILE_NAME);
+        let _ = fs::remove_file(&rotated_path);
+        let _ = fs::rename(&path, rotated_path);
+    }
+
+    let record = json!({
+        "timestamp": now_string(),
+        "event": event,
+        "details": sanitize_diagnostic_value(details),
+    });
+    if let Ok(mut file) = fs::OpenOptions::new().create(true).append(true).open(path) {
+        let _ = writeln!(file, "{record}");
     }
 }
 
@@ -1104,6 +1352,21 @@ fn to_message(error: impl std::fmt::Display) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn diagnostic_details_remove_sensitive_values() {
+        let sanitized = sanitize_diagnostic_value(json!({
+            "task_id": "task-1",
+            "notes": "private task note",
+            "access_token": "secret-token",
+            "nested": { "credential": "secret", "due": "2026-08-12" }
+        }));
+        assert_eq!(sanitized["task_id"], "task-1");
+        assert_eq!(sanitized["nested"]["due"], "2026-08-12");
+        assert!(sanitized.get("notes").is_none());
+        assert!(sanitized.get("access_token").is_none());
+        assert!(sanitized["nested"].get("credential").is_none());
+    }
 
     #[test]
     fn migrate_creates_cache_tables() {

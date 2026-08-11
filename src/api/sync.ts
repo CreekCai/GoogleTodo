@@ -65,6 +65,9 @@ export const syncApi = {
     invoke<void>("sync_set_app_setting", { key, value }),
   cachedSnapshot: () => invoke<CachedSnapshot>("sync_cached_snapshot"),
   queueStatus: () => invoke<SyncQueueSnapshot>("sync_queue_status"),
+  recordDiagnosticEvent: (event: string, details: Record<string, unknown>) =>
+    invoke<void>("sync_record_diagnostic_event", { event, details }),
+  openDiagnosticLogFolder: () => invoke<string>("sync_open_diagnostic_log_folder"),
   purgeArchivedTasks: (olderThanDays: 7 | 30) =>
     invoke<ArchiveCleanupResult>("sync_purge_archived_tasks", { olderThanDays }),
   syncNow: () => taskMutationQueue.then(() => invoke<SyncResult>("sync_google_now")),

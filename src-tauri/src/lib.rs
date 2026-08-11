@@ -163,6 +163,8 @@ pub fn run() {
             sync_engine::sync_google_now,
             sync_engine::sync_set_app_setting,
             sync_engine::sync_queue_status,
+            sync_engine::sync_record_diagnostic_event,
+            sync_engine::sync_open_diagnostic_log_folder,
             sync_engine::sync_purge_archived_tasks,
             sync_engine::sync_create_task,
             sync_engine::sync_update_task,

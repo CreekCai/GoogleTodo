@@ -18,6 +18,7 @@ import {
   Cloud,
   CloudOff,
   Folder,
+  FolderOpen,
   GripVertical,
   Home,
   ListChecks,
@@ -2333,13 +2334,29 @@ export default function App() {
   };
 
   const persistGoogleTaskUpdate = async (taskId: string, patch: Partial<Task>) => {
-    if (!googleReady) {
-      setSyncMessage(uiText(language, "Google is not connected. Changes are only local for now.", "当前未连接 Google，修改暂时只保存在本地界面。"));
+    const task = tasks.find((item) => item.id === taskId);
+    if (!task) {
+      void syncApi.recordDiagnosticEvent("task_update_skipped", {
+        task_id: taskId,
+        reason: "task_not_found_in_ui_state",
+        changed_fields: Object.keys(patch),
+      }).catch(() => undefined);
       return false;
     }
 
-    const task = tasks.find((item) => item.id === taskId);
-    if (!task) {
+    void syncApi.recordDiagnosticEvent("task_update_requested", {
+      task_id: task.id,
+      task_list_id: task.listId,
+      task_title: task.title,
+      changed_fields: Object.keys(patch),
+      due_text: patch.dueText,
+      due_label: patch.dueLabel,
+      completed: patch.completed,
+      google_ready: googleReady,
+    }).catch(() => undefined);
+
+    if (!googleReady) {
+      setSyncMessage(uiText(language, "Google is not connected. Changes are only local for now.", "当前未连接 Google，修改暂时只保存在本地界面。"));
       return false;
     }
 
@@ -2376,6 +2393,12 @@ export default function App() {
       noteTaskSyncQueued(uiText(language, "Saved locally. Background sync is running.", "已保存到本地，后台同步中。"));
       return true;
     } catch (error) {
+      void syncApi.recordDiagnosticEvent("task_update_failed", {
+        task_id: task.id,
+        task_list_id: task.listId,
+        changed_fields: Object.keys(patch),
+        error: String(error),
+      }).catch(() => undefined);
       const message = `${uiText(language, "Save failed: ", "保存失败：")}${String(error)}`;
       setSyncMessage(message);
       setLastGoogleError(message);
@@ -3266,6 +3289,11 @@ export default function App() {
               language={language}
               onSync={() => {
                 void refreshGoogleWorkspaceData(activeListId).then(() => refreshSyncQueueStatus(true));
+              }}
+              onOpenLogFolder={() => {
+                void syncApi.openDiagnosticLogFolder().catch((error) => {
+                  setLastGoogleError(`${uiText(language, "Could not open the log folder: ", "无法打开日志目录：")}${String(error)}`);
+                });
               }}
             />
           ) : null}
@@ -5391,6 +5419,7 @@ type SyncStatusWorkspaceProps = {
   queueError: string;
   language: LanguageMode;
   onSync: () => void;
+  onOpenLogFolder: () => void;
 };
 
 function syncErrorSuggestion(error: string, language: LanguageMode) {
@@ -5413,7 +5442,7 @@ function syncErrorSuggestion(error: string, language: LanguageMode) {
   return uiText(language, "Use Refresh & Sync to retry. If the error persists, check Google sign-in and proxy settings.", "请点击“刷新同步”重试；若持续失败，请检查 Google 登录状态和代理设置。");
 }
 
-function SyncStatusWorkspace({ snapshot, loading, syncing, globalError, queueError, language, onSync }: SyncStatusWorkspaceProps) {
+function SyncStatusWorkspace({ snapshot, loading, syncing, globalError, queueError, language, onSync, onOpenLogFolder }: SyncStatusWorkspaceProps) {
   const statusMeta = {
     syncing: {
       label: uiText(language, "Syncing", "同步中"),
@@ -5463,10 +5492,16 @@ function SyncStatusWorkspace({ snapshot, loading, syncing, globalError, queueErr
             {uiText(language, "Inspect the task queue and see what is slowing down synchronization.", "查看任务同步队列，并定位同步耗时较长的具体原因。")}
           </p>
         </div>
-        <Button variant="secondary" disabled={syncing} onClick={onSync}>
-          <RefreshCw size={17} className={syncing ? "animate-spin text-warning" : ""} />
-          {syncing ? uiText(language, "Syncing...", "同步中...") : uiText(language, "Refresh & Sync", "刷新同步")}
-        </Button>
+        <div className="flex flex-wrap justify-end gap-sm">
+          <Button variant="secondary" onClick={onOpenLogFolder}>
+            <FolderOpen size={17} />
+            {uiText(language, "Open Log Folder", "打开日志目录")}
+          </Button>
+          <Button variant="secondary" disabled={syncing} onClick={onSync}>
+            <RefreshCw size={17} className={syncing ? "animate-spin text-warning" : ""} />
+            {syncing ? uiText(language, "Syncing...", "同步中...") : uiText(language, "Refresh & Sync", "刷新同步")}
+          </Button>
+        </div>
       </div>
 
       <div className="mt-lg grid max-w-5xl grid-cols-2 gap-sm lg:grid-cols-4">
