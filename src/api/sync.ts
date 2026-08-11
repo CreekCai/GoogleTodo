@@ -46,9 +46,6 @@ export type SyncQueueSnapshot = {
   syncing_count: number;
   completed_count: number;
   failed_count: number;
-  latest_sequence: number | null;
-  completed_through_sequence: number | null;
-  active_batch_max_sequence: number | null;
 };
 
 let taskMutationQueue: Promise<void> = Promise.resolve();

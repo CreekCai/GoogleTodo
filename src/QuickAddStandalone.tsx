@@ -659,7 +659,7 @@ export function QuickAddStandalone() {
                       <button
                         key={candidate.id}
                         className={cn(
-                          "group flex w-full items-center gap-sm rounded-lg px-sm py-sm text-left transition-all",
+                          "app-focus-ring group flex w-full items-center gap-sm rounded-lg px-sm py-sm text-left transition-[background-color,color,box-shadow] duration-150 ease-out",
                           active
                             ? theme === "dark"
                               ? "bg-on-dark text-surface-dark shadow-subtle"
@@ -853,7 +853,7 @@ export function QuickAddStandalone() {
 
           <button
             className={cn(
-              "inline-flex h-9 items-center justify-center gap-xs rounded px-lg text-button shadow-subtle transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60",
+              "app-focus-ring inline-flex h-9 select-none items-center justify-center gap-xs rounded px-lg text-button shadow-subtle transition-[transform,background-color,color,box-shadow,opacity] duration-150 ease-out active:scale-[0.97] disabled:cursor-not-allowed disabled:scale-100 disabled:opacity-60",
               state === "saved" ? "bg-success text-white" : state === "error" ? "bg-error text-white" : "bg-primary text-on-dark hover:bg-primary-active",
             )}
             disabled={state === "saving"}

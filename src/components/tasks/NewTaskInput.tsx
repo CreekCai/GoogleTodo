@@ -11,7 +11,7 @@ type NewTaskInputProps = {
 export function NewTaskInput({ value, placeholder, onChange, onSubmit }: NewTaskInputProps) {
   return (
     <form
-      className="group flex items-center gap-md rounded-lg border border-hairline bg-surface-card p-sm transition-all focus-within:border-outline focus-within:bg-canvas focus-within:ring-1 focus-within:ring-outline dark:border-surface-dark-elevated dark:bg-surface-dark-elevated dark:focus-within:border-on-dark dark:focus-within:ring-on-dark"
+      className="group flex items-center gap-md rounded-lg border border-hairline bg-surface-card p-sm transition-[background-color,border-color,box-shadow] duration-150 ease-out focus-within:border-outline focus-within:bg-canvas focus-within:ring-1 focus-within:ring-outline dark:border-surface-dark-elevated dark:bg-surface-dark-elevated dark:focus-within:border-on-dark dark:focus-within:ring-on-dark"
       onSubmit={(event) => {
         event.preventDefault();
         onSubmit();
@@ -24,7 +24,7 @@ export function NewTaskInput({ value, placeholder, onChange, onSubmit }: NewTask
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
       />
-      <Button className="hidden h-9 px-sm group-focus-within:inline-flex" type="submit">
+      <Button className="h-9 px-sm" type="submit" disabled={!value.trim()}>
         <CornerDownLeft size={17} />
         Add
       </Button>

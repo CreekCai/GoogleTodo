@@ -3927,7 +3927,7 @@ function TaskRow({
     <article
       data-detail-interactive="true"
       className={cn(
-        "rounded-xl border border-hairline bg-surface-card p-md shadow-subtle transition-all hover:-translate-y-px hover:border-primary/30 hover:shadow-panel dark:border-surface-dark-elevated dark:bg-surface-dark-elevated",
+        "rounded-xl border border-hairline bg-surface-card p-md shadow-subtle transition-[background-color,border-color,box-shadow] duration-150 ease-out hover:border-primary/30 hover:shadow-panel dark:border-surface-dark-elevated dark:bg-surface-dark-elevated",
         !selected && toneClass,
         selected && "border-primary bg-canvas ring-2 ring-primary/10 dark:border-primary dark:bg-surface-dark",
       )}
@@ -3972,7 +3972,7 @@ function CalendarEventRow({
     <article
       data-detail-interactive="true"
       className={cn(
-        "rounded-xl border border-hairline bg-surface-card p-md shadow-subtle transition-all hover:-translate-y-px hover:border-primary/30 hover:shadow-panel dark:border-surface-dark-elevated dark:bg-surface-dark-elevated",
+        "rounded-xl border border-hairline bg-surface-card p-md shadow-subtle transition-[background-color,border-color,box-shadow] duration-150 ease-out hover:border-primary/30 hover:shadow-panel dark:border-surface-dark-elevated dark:bg-surface-dark-elevated",
         selected && "border-primary ring-2 ring-primary/10 dark:border-primary",
       )}
       style={{ borderLeftColor: event.color ?? "#8B5CF6", borderLeftWidth: 4 }}
@@ -4573,7 +4573,7 @@ function BoardWorkspace({
                     role="button"
                     tabIndex={0}
                     className={cn(
-                      "app-focus-ring w-full select-none rounded-xl border p-md text-left shadow-subtle transition-all hover:-translate-y-px hover:ring-1 hover:ring-primary",
+                      "app-focus-ring w-full select-none rounded-xl border p-md text-left shadow-subtle transition-[background-color,border-color,box-shadow,opacity] duration-150 ease-out hover:ring-1 hover:ring-primary",
                       selectedTaskId === task.id && "ring-2 ring-primary",
                       pointerDragPreview?.active && pointerDragPreview.taskId === task.id && "scale-[0.98] opacity-35",
                       hoveredBoardTaskId === task.id
@@ -4873,7 +4873,7 @@ function CalendarWorkspace({
                 <button
                   key={task.id}
                   data-detail-interactive="true"
-                  className={cn("app-focus-ring w-full rounded-xl p-md text-left shadow-subtle transition-all hover:-translate-y-px hover:ring-1 hover:ring-primary", listToneClass(task.listId, lists, listColorMap, listCustomColorMap))}
+                  className={cn("app-focus-ring w-full rounded-xl p-md text-left shadow-subtle transition-[background-color,border-color,box-shadow] duration-150 ease-out hover:ring-1 hover:ring-primary", listToneClass(task.listId, lists, listColorMap, listCustomColorMap))}
                   style={customColorStyle(listCustomColorMap[task.listId])}
                   onMouseEnter={(event) => updateTaskHover(task.id, event)}
                   onMouseMove={(event) => updateTaskHover(task.id, event)}
@@ -5486,9 +5486,7 @@ function SyncStatusWorkspace({ snapshot, loading, syncing, globalError, queueErr
     snapshot
       && snapshot.waiting_count === 0
       && snapshot.syncing_count === 0
-      && snapshot.failed_count === 0
-      && (snapshot.latest_sequence === null
-        || (snapshot.completed_through_sequence ?? 0) >= snapshot.latest_sequence),
+      && snapshot.failed_count === 0,
   );
   const progressTitle = allSynced
     ? uiText(language, "All changes are synchronized", "全部修改均已同步")
@@ -5497,17 +5495,30 @@ function SyncStatusWorkspace({ snapshot, loading, syncing, globalError, queueErr
       : syncing
         ? uiText(language, "A synchronization batch is in progress", "当前同步批次正在进行")
         : uiText(language, "Changes are safely waiting in the queue", "修改已安全进入任务池等待同步");
-  const completedSequence = snapshot?.completed_through_sequence;
   const progressDetail = snapshot
     ? allSynced
-      ? completedSequence
-        ? uiText(language, `Completed through sequence #${completedSequence}.`, `已同步至序号 #${completedSequence}。`)
-        : uiText(language, "There are no queued changes.", "当前没有排队中的修改。")
-      : uiText(
-          language,
-          `${completedSequence ? `Completed through #${completedSequence}. ` : ""}${syncing && snapshot.active_batch_max_sequence ? `Current batch ends at #${snapshot.active_batch_max_sequence}. ` : ""}${snapshot.waiting_count} waiting, ${snapshot.syncing_count} syncing, ${snapshot.failed_count} failed.`,
-          `${completedSequence ? `已同步至 #${completedSequence}。` : ""}${syncing && snapshot.active_batch_max_sequence ? `本轮同步至 #${snapshot.active_batch_max_sequence}。` : ""}另有 ${snapshot.waiting_count} 项等待、${snapshot.syncing_count} 项同步中、${snapshot.failed_count} 项失败。`,
-        )
+      ? uiText(language, "Every queued change has reached Google Tasks.", "任务池中的修改都已成功同步到 Google Tasks。")
+      : snapshot.failed_count > 0
+        ? uiText(
+            language,
+            `${snapshot.failed_count} change(s) need attention. Resolve the error below, then refresh sync.`,
+            `有 ${snapshot.failed_count} 项修改需要处理。请根据下方提示解决后，再刷新同步。`,
+          )
+        : syncing
+          ? uiText(
+              language,
+              snapshot.waiting_count > 0
+                ? `Synchronizing now; ${snapshot.waiting_count} newer change(s) are safely queued.`
+                : "Synchronizing the current changes. You can keep editing.",
+              snapshot.waiting_count > 0
+                ? `正在同步，另有 ${snapshot.waiting_count} 项新修改已安全进入任务池。`
+                : "正在同步当前修改，你可以继续操作任务。",
+            )
+          : uiText(
+              language,
+              `${snapshot.waiting_count} change(s) are safely queued. Select Refresh & Sync when you are ready.`,
+              `已有 ${snapshot.waiting_count} 项修改安全进入任务池，准备好后请点击“刷新同步”。`,
+            )
     : "";
 
   return (
@@ -5524,7 +5535,7 @@ function SyncStatusWorkspace({ snapshot, loading, syncing, globalError, queueErr
             <FolderOpen size={17} />
             {uiText(language, "Open Log Folder", "打开日志目录")}
           </Button>
-          <Button variant="secondary" disabled={syncing} onClick={onSync}>
+          <Button variant="secondary" disabled={syncing} aria-busy={syncing} onClick={onSync}>
             <RefreshCw size={17} className={syncing ? "animate-spin text-warning" : ""} />
             {syncing ? uiText(language, "Syncing...", "同步中...") : uiText(language, "Refresh & Sync", "刷新同步")}
           </Button>
@@ -5543,6 +5554,7 @@ function SyncStatusWorkspace({ snapshot, loading, syncing, globalError, queueErr
       {snapshot ? (
         <div
           role="status"
+          aria-live="polite"
           className={cn(
             "mt-sm flex max-w-5xl items-start gap-sm rounded-lg border p-md",
             allSynced

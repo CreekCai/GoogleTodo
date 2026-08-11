@@ -1,7 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     fs,
-    io::Write,
+    io::{BufRead, BufReader, Write},
     path::Path,
     sync::Mutex,
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -22,7 +22,7 @@ const DB_FILE_NAME: &str = "google_tasks_cache.sqlite3";
 const SYNC_RETRY_DELAYS_SECONDS: [u64; 3] = [1, 2, 4];
 const DIAGNOSTIC_LOG_FILE_NAME: &str = "google-todo-diagnostic.jsonl";
 const DIAGNOSTIC_LOG_ROTATED_FILE_NAME: &str = "google-todo-diagnostic.jsonl.1";
-const DIAGNOSTIC_LOG_MAX_BYTES: u64 = 5 * 1024 * 1024;
+const DIAGNOSTIC_LOG_RETENTION_SECONDS: u64 = 3 * 24 * 60 * 60;
 static DIAGNOSTIC_LOG_LOCK: Mutex<()> = Mutex::new(());
 static SYNC_RUN_LOCK: Mutex<()> = Mutex::new(());
 
@@ -70,9 +70,6 @@ pub struct SyncQueueSnapshot {
     pub syncing_count: i64,
     pub completed_count: i64,
     pub failed_count: i64,
-    pub latest_sequence: Option<i64>,
-    pub completed_through_sequence: Option<i64>,
-    pub active_batch_max_sequence: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -694,23 +691,50 @@ fn append_diagnostic_log(app: &AppHandle, event: &str, details: Value) {
     }
 
     let path = dir.join(DIAGNOSTIC_LOG_FILE_NAME);
-    if fs::metadata(&path)
-        .map(|metadata| metadata.len() >= DIAGNOSTIC_LOG_MAX_BYTES)
-        .unwrap_or(false)
-    {
-        let rotated_path = dir.join(DIAGNOSTIC_LOG_ROTATED_FILE_NAME);
-        let _ = fs::remove_file(&rotated_path);
-        let _ = fs::rename(&path, rotated_path);
-    }
+    let now = unix_now();
+    let _ = prune_diagnostic_log(&path, now);
+    let _ = fs::remove_file(dir.join(DIAGNOSTIC_LOG_ROTATED_FILE_NAME));
 
     let record = json!({
-        "timestamp": now_string(),
+        "timestamp": now.to_string(),
         "event": event,
         "details": sanitize_diagnostic_value(details),
     });
     if let Ok(mut file) = fs::OpenOptions::new().create(true).append(true).open(path) {
         let _ = writeln!(file, "{record}");
     }
+}
+
+fn prune_diagnostic_log(path: &Path, now: u64) -> Result<(), std::io::Error> {
+    if !path.exists() {
+        return Ok(());
+    }
+
+    let cutoff = now.saturating_sub(DIAGNOSTIC_LOG_RETENTION_SECONDS);
+    let mut first_line = String::new();
+    BufReader::new(fs::File::open(path)?).read_line(&mut first_line)?;
+    if diagnostic_timestamp(first_line.trim()).is_some_and(|timestamp| timestamp >= cutoff) {
+        return Ok(());
+    }
+
+    let content = fs::read_to_string(path)?;
+    let mut retained = String::new();
+    for line in content.lines() {
+        if diagnostic_timestamp(line).is_some_and(|timestamp| timestamp >= cutoff) {
+            retained.push_str(line);
+            retained.push('\n');
+        }
+    }
+    fs::write(path, retained)
+}
+
+fn diagnostic_timestamp(line: &str) -> Option<u64> {
+    let record = serde_json::from_str::<Value>(line).ok()?;
+    let timestamp = record.get("timestamp")?;
+    timestamp
+        .as_str()
+        .and_then(|value| value.parse::<u64>().ok())
+        .or_else(|| timestamp.as_u64())
 }
 
 fn open_app_database(app: &AppHandle) -> Result<Connection, String> {
@@ -928,35 +952,12 @@ fn read_sync_queue_snapshot(conn: &Connection) -> Result<SyncQueueSnapshot, Stri
         });
     }
 
-    let latest_sequence = conn
-        .query_row("SELECT MAX(id) FROM pending_queue", [], |row| row.get(0))
-        .map_err(to_message)?;
-    let completed_through_sequence = conn
-        .query_row(
-            "SELECT MAX(candidate.id)
-             FROM pending_queue candidate
-             WHERE candidate.sync_status = 'completed'
-               AND NOT EXISTS (
-                 SELECT 1 FROM pending_queue earlier
-                 WHERE earlier.id < candidate.id
-                   AND earlier.sync_status <> 'completed'
-               )",
-            [],
-            |row| row.get(0),
-        )
-        .map_err(to_message)?;
-    let active_batch_max_sequence = get_meta(conn, "activeSyncBatchMaxId")?
-        .and_then(|value| value.parse::<i64>().ok());
-
     Ok(SyncQueueSnapshot {
         items,
         waiting_count: count_status("waiting")?,
         syncing_count: count_status("syncing")?,
         completed_count: count_status("completed")?,
         failed_count: count_status("failed")?,
-        latest_sequence,
-        completed_through_sequence,
-        active_batch_max_sequence,
     })
 }
 
@@ -1459,10 +1460,14 @@ fn user_message_for_status(status: &str, error: &str) -> String {
 }
 
 fn now_string() -> String {
+    unix_now().to_string()
+}
+
+fn unix_now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_secs().to_string())
-        .unwrap_or_else(|_| "0".to_string())
+        .map(|duration| duration.as_secs())
+        .unwrap_or(0)
 }
 
 fn random_id() -> String {
@@ -1526,6 +1531,28 @@ mod tests {
         set_app_setting(&conn, "googleTodoListColors", None).expect("delete setting");
         let settings = read_app_settings(&conn).expect("read settings");
         assert!(!settings.contains_key("googleTodoListColors"));
+    }
+
+    #[test]
+    fn diagnostic_log_keeps_only_the_last_three_days() {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        let path = temp_dir.path().join(DIAGNOSTIC_LOG_FILE_NAME);
+        let now = 1_800_000_000;
+        fs::write(
+            &path,
+            format!(
+                "{}\n{}\n",
+                json!({ "timestamp": (now - DIAGNOSTIC_LOG_RETENTION_SECONDS - 1).to_string(), "event": "old" }),
+                json!({ "timestamp": (now - DIAGNOSTIC_LOG_RETENTION_SECONDS + 1).to_string(), "event": "recent" }),
+            ),
+        )
+        .expect("write diagnostic log");
+
+        prune_diagnostic_log(&path, now).expect("prune diagnostic log");
+
+        let retained = fs::read_to_string(path).expect("read diagnostic log");
+        assert!(!retained.contains("\"old\""));
+        assert!(retained.contains("\"recent\""));
     }
 
     #[test]

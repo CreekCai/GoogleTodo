@@ -32,7 +32,7 @@ export function TaskItem({
   return (
     <article
       className={cn(
-        "group cursor-pointer rounded-lg border p-md transition-all",
+        "group cursor-pointer rounded-lg border p-md transition-[background-color,border-color,box-shadow,opacity] duration-150 ease-out",
         selected
           ? "border-primary bg-surface-soft shadow-subtle dark:border-primary dark:bg-surface-dark-elevated"
           : "border-transparent bg-canvas hover:border-hairline hover:bg-surface-card dark:bg-surface-dark dark:hover:border-surface-dark-elevated dark:hover:bg-surface-dark-elevated",

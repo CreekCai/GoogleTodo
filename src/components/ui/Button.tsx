@@ -23,7 +23,7 @@ export function Button({ variant = "primary", className, children, ...props }: B
   return (
     <button
       className={cn(
-        "inline-flex h-10 items-center justify-center gap-xs rounded-lg px-md text-button transition-all active:translate-y-px disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50",
+        "app-focus-ring inline-flex h-10 select-none items-center justify-center gap-xs rounded-lg px-md text-button transition-[transform,background-color,border-color,color,box-shadow,opacity] duration-150 ease-out active:scale-[0.97] disabled:cursor-not-allowed disabled:scale-100 disabled:opacity-50",
         variants[variant],
         className,
       )}
