@@ -5482,6 +5482,33 @@ function SyncStatusWorkspace({ snapshot, loading, syncing, globalError, queueErr
   const errorEntries = [globalError, queueError].filter(
     (message, index, messages): message is string => Boolean(message) && messages.indexOf(message) === index,
   );
+  const allSynced = Boolean(
+    snapshot
+      && snapshot.waiting_count === 0
+      && snapshot.syncing_count === 0
+      && snapshot.failed_count === 0
+      && (snapshot.latest_sequence === null
+        || (snapshot.completed_through_sequence ?? 0) >= snapshot.latest_sequence),
+  );
+  const progressTitle = allSynced
+    ? uiText(language, "All changes are synchronized", "全部修改均已同步")
+    : snapshot?.failed_count
+      ? uiText(language, "Synchronization stopped on an error", "同步因错误而停止")
+      : syncing
+        ? uiText(language, "A synchronization batch is in progress", "当前同步批次正在进行")
+        : uiText(language, "Changes are safely waiting in the queue", "修改已安全进入任务池等待同步");
+  const completedSequence = snapshot?.completed_through_sequence;
+  const progressDetail = snapshot
+    ? allSynced
+      ? completedSequence
+        ? uiText(language, `Completed through sequence #${completedSequence}.`, `已同步至序号 #${completedSequence}。`)
+        : uiText(language, "There are no queued changes.", "当前没有排队中的修改。")
+      : uiText(
+          language,
+          `${completedSequence ? `Completed through #${completedSequence}. ` : ""}${syncing && snapshot.active_batch_max_sequence ? `Current batch ends at #${snapshot.active_batch_max_sequence}. ` : ""}${snapshot.waiting_count} waiting, ${snapshot.syncing_count} syncing, ${snapshot.failed_count} failed.`,
+          `${completedSequence ? `已同步至 #${completedSequence}。` : ""}${syncing && snapshot.active_batch_max_sequence ? `本轮同步至 #${snapshot.active_batch_max_sequence}。` : ""}另有 ${snapshot.waiting_count} 项等待、${snapshot.syncing_count} 项同步中、${snapshot.failed_count} 项失败。`,
+        )
+    : "";
 
   return (
     <section className="min-h-0 flex-1 overflow-y-auto bg-canvas p-lg dark:bg-surface-dark">
@@ -5512,6 +5539,26 @@ function SyncStatusWorkspace({ snapshot, loading, syncing, globalError, queueErr
           </div>
         ))}
       </div>
+
+      {snapshot ? (
+        <div
+          role="status"
+          className={cn(
+            "mt-sm flex max-w-5xl items-start gap-sm rounded-lg border p-md",
+            allSynced
+              ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-400/30 dark:bg-emerald-400/10 dark:text-emerald-100"
+              : snapshot.failed_count
+                ? "border-red-200 bg-red-50 text-red-800 dark:border-red-400/30 dark:bg-red-400/10 dark:text-red-100"
+                : "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-100",
+          )}
+        >
+          {allSynced ? <CheckCircle2 size={20} className="mt-xxs shrink-0" /> : <Clock3 size={20} className="mt-xxs shrink-0" />}
+          <div>
+            <div className="text-title-md">{progressTitle}</div>
+            <p className="mt-xxs text-body-sm opacity-80">{progressDetail}</p>
+          </div>
+        </div>
+      ) : null}
 
       {errorEntries.length > 0 ? (
         <div role="alert" className="mt-lg max-w-5xl rounded-lg border border-red-200 bg-red-50 p-md dark:border-red-400/30 dark:bg-red-400/10">

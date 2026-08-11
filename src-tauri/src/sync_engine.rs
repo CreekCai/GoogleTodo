@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs,
     io::Write,
     path::Path,
@@ -8,7 +8,7 @@ use std::{
 };
 
 use rand::{distributions::Alphanumeric, Rng};
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tauri::{AppHandle, Manager, State};
@@ -24,6 +24,7 @@ const DIAGNOSTIC_LOG_FILE_NAME: &str = "google-todo-diagnostic.jsonl";
 const DIAGNOSTIC_LOG_ROTATED_FILE_NAME: &str = "google-todo-diagnostic.jsonl.1";
 const DIAGNOSTIC_LOG_MAX_BYTES: u64 = 5 * 1024 * 1024;
 static DIAGNOSTIC_LOG_LOCK: Mutex<()> = Mutex::new(());
+static SYNC_RUN_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Debug, Serialize)]
 pub struct CachedSnapshot {
@@ -69,6 +70,9 @@ pub struct SyncQueueSnapshot {
     pub syncing_count: i64,
     pub completed_count: i64,
     pub failed_count: i64,
+    pub latest_sequence: Option<i64>,
+    pub completed_through_sequence: Option<i64>,
+    pub active_batch_max_sequence: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -191,16 +195,20 @@ pub async fn sync_google_now(app: AppHandle) -> Result<SyncResult, String> {
 }
 
 fn sync_google_now_blocking(app: AppHandle) -> Result<SyncResult, String> {
+    let _sync_guard = SYNC_RUN_LOCK
+        .lock()
+        .map_err(|_| "Synchronization lock is unavailable".to_string())?;
     append_diagnostic_log(&app, "sync_started", Value::Null);
-    let conn = open_app_database(&app)?;
+    let mut conn = open_app_database(&app)?;
     let state = app.state::<GoogleTasksState>();
-    match run_full_sync(&app, &conn, &state) {
+    match run_full_sync(&app, &mut conn, &state) {
         Ok(()) => Ok(SyncResult {
             status: "ok".to_string(),
             message: "同步完成".to_string(),
             snapshot: read_cached_snapshot(&conn, false)?,
         }),
         Err(error) => {
+            delete_meta(&conn, "activeSyncBatchMaxId")?;
             let status = classify_google_error(&error);
             append_diagnostic_log(
                 &app,
@@ -418,30 +426,43 @@ pub async fn sync_move_task(app: AppHandle, input: MoveTaskInput) -> Result<Goog
 }
 fn run_full_sync(
     app: &AppHandle,
-    conn: &Connection,
+    conn: &mut Connection,
     state: &State<GoogleTasksState>,
 ) -> Result<(), String> {
-    flush_pending_queue(app, conn, state)?;
+    let batch_max_sequence = max_pending_sequence(conn)?;
+    if let Some(sequence) = batch_max_sequence {
+        set_meta(conn, "activeSyncBatchMaxId", &sequence.to_string())?;
+    } else {
+        delete_meta(conn, "activeSyncBatchMaxId")?;
+    }
+    append_diagnostic_log(
+        app,
+        "sync_batch_started",
+        json!({ "batch_max_sequence": batch_max_sequence }),
+    );
+    flush_pending_queue(app, conn, state, batch_max_sequence)?;
     let lists = retry_auth_once(state, || {
         google_tasks::google_task_lists(app.clone(), state.clone())
     })?;
 
-    replace_task_lists(conn, &lists)?;
-    replace_tasks_begin(conn)?;
+    let mut remote_tasks = Vec::new();
     for list in &lists {
         let tasks = retry_auth_once(state, || {
             google_tasks::google_tasks(app.clone(), state.clone(), list.id.clone())
         })?;
-        for task in tasks {
-            upsert_task(conn, &task)?;
-        }
+        remote_tasks.extend(tasks);
     }
-    delete_tasks_not_in_lists(conn, &lists)?;
+    replace_remote_snapshot(conn, &lists, &remote_tasks)?;
     set_meta(conn, "lastSyncedAt", &now_string())?;
+    delete_meta(conn, "activeSyncBatchMaxId")?;
     append_diagnostic_log(
         app,
         "sync_completed",
-        json!({ "task_list_count": lists.len() }),
+        json!({
+            "task_list_count": lists.len(),
+            "task_count": remote_tasks.len(),
+            "batch_max_sequence": batch_max_sequence,
+        }),
     );
     Ok(())
 }
@@ -450,8 +471,9 @@ fn flush_pending_queue(
     app: &AppHandle,
     conn: &Connection,
     state: &State<GoogleTasksState>,
+    batch_max_sequence: Option<i64>,
 ) -> Result<(), String> {
-    let pending = pending_items(conn)?;
+    let pending = pending_items_through(conn, batch_max_sequence)?;
     let mut id_map: HashMap<String, String> = HashMap::new();
 
     for item in pending {
@@ -557,13 +579,16 @@ fn process_pending_item(
         "update_task" => {
             let mut input: UpdateTaskInput =
                 serde_json::from_str(&item.payload_json).map_err(to_message)?;
+            let local_task_id = input.task_id.clone();
             if let Some(remote_id) = id_map.get(&input.task_id).cloned() {
                 input.task_id = remote_id;
             }
             let remote = retry_auth_once(state, || {
                 google_tasks::google_update_task(app.clone(), state.clone(), input.clone())
             })?;
-            upsert_task(conn, &remote)?;
+            if !has_newer_pending_for_task(conn, item.id, &local_task_id)? {
+                upsert_task(conn, &remote)?;
+            }
         }
         "delete_task" => {
             if let Some(task_id) = item.task_id.as_deref() {
@@ -583,13 +608,16 @@ fn process_pending_item(
         "move_task" => {
             let mut input: MoveTaskInput =
                 serde_json::from_str(&item.payload_json).map_err(to_message)?;
+            let local_task_id = input.task_id.clone();
             if let Some(remote_id) = id_map.get(&input.task_id).cloned() {
                 input.task_id = remote_id;
             }
             let remote = retry_auth_once(state, || {
                 google_tasks::google_move_task(app.clone(), state.clone(), input.clone())
             })?;
-            upsert_task(conn, &remote)?;
+            if !has_newer_pending_for_task(conn, item.id, &local_task_id)? {
+                upsert_task(conn, &remote)?;
+            }
         }
         _ => {}
     }
@@ -900,12 +928,35 @@ fn read_sync_queue_snapshot(conn: &Connection) -> Result<SyncQueueSnapshot, Stri
         });
     }
 
+    let latest_sequence = conn
+        .query_row("SELECT MAX(id) FROM pending_queue", [], |row| row.get(0))
+        .map_err(to_message)?;
+    let completed_through_sequence = conn
+        .query_row(
+            "SELECT MAX(candidate.id)
+             FROM pending_queue candidate
+             WHERE candidate.sync_status = 'completed'
+               AND NOT EXISTS (
+                 SELECT 1 FROM pending_queue earlier
+                 WHERE earlier.id < candidate.id
+                   AND earlier.sync_status <> 'completed'
+               )",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(to_message)?;
+    let active_batch_max_sequence = get_meta(conn, "activeSyncBatchMaxId")?
+        .and_then(|value| value.parse::<i64>().ok());
+
     Ok(SyncQueueSnapshot {
         items,
         waiting_count: count_status("waiting")?,
         syncing_count: count_status("syncing")?,
         completed_count: count_status("completed")?,
         failed_count: count_status("failed")?,
+        latest_sequence,
+        completed_through_sequence,
+        active_batch_max_sequence,
     })
 }
 
@@ -1029,24 +1080,80 @@ fn upsert_task_list(conn: &Connection, list: &GoogleTaskListDto) -> Result<(), S
     Ok(())
 }
 
-fn replace_tasks_begin(conn: &Connection) -> Result<(), String> {
-    conn.execute("DELETE FROM tasks WHERE id NOT LIKE 'local-%'", [])
+fn replace_remote_snapshot(
+    conn: &mut Connection,
+    lists: &[GoogleTaskListDto],
+    remote_tasks: &[GoogleTaskDto],
+) -> Result<(), String> {
+    let transaction = conn
+        .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(to_message)?;
-    Ok(())
-}
-
-fn delete_tasks_not_in_lists(conn: &Connection, lists: &[GoogleTaskListDto]) -> Result<(), String> {
-    let valid_lists = lists
+    let dirty_task_ids = pending_dirty_task_ids(&transaction)?;
+    let remote_task_ids = remote_tasks
         .iter()
-        .map(|list| list.id.as_str())
-        .collect::<Vec<_>>();
-    let tasks = read_tasks(conn)?;
-    for task in tasks {
-        if !task.id.starts_with("local-") && !valid_lists.contains(&task.task_list_id.as_str()) {
-            delete_cached_task(conn, &task.id)?;
+        .map(|task| task.id.as_str())
+        .collect::<HashSet<_>>();
+
+    replace_task_lists(&transaction, lists)?;
+    for task in remote_tasks {
+        if !dirty_task_ids.contains(&task.id) {
+            upsert_task(&transaction, task)?;
         }
     }
-    Ok(())
+
+    for cached_task in read_tasks(&transaction)? {
+        if !cached_task.id.starts_with("local-")
+            && !remote_task_ids.contains(cached_task.id.as_str())
+            && !dirty_task_ids.contains(&cached_task.id)
+        {
+            delete_cached_task(&transaction, &cached_task.id)?;
+        }
+    }
+
+    transaction.commit().map_err(to_message)
+}
+
+fn pending_dirty_task_ids(conn: &Connection) -> Result<HashSet<String>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT task_id, local_id
+             FROM pending_queue
+             WHERE sync_status <> 'completed'",
+        )
+        .map_err(to_message)?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, Option<String>>(0)?,
+                row.get::<_, Option<String>>(1)?,
+            ))
+        })
+        .map_err(to_message)?;
+    let mut ids = HashSet::new();
+    for row in rows {
+        let (task_id, local_id) = row.map_err(to_message)?;
+        ids.extend(task_id);
+        ids.extend(local_id);
+    }
+    Ok(ids)
+}
+
+fn has_newer_pending_for_task(
+    conn: &Connection,
+    current_queue_id: i64,
+    task_id: &str,
+) -> Result<bool, String> {
+    conn.query_row(
+        "SELECT EXISTS(
+           SELECT 1 FROM pending_queue
+           WHERE id > ?1
+             AND sync_status <> 'completed'
+             AND (task_id = ?2 OR local_id = ?2)
+         )",
+        params![current_queue_id, task_id],
+        |row| row.get(0),
+    )
+    .map_err(to_message)
 }
 
 fn upsert_task(conn: &Connection, task: &GoogleTaskDto) -> Result<(), String> {
@@ -1194,17 +1301,32 @@ fn enqueue_pending(
     Ok(())
 }
 
-fn pending_items(conn: &Connection) -> Result<Vec<PendingItem>, String> {
+fn max_pending_sequence(conn: &Connection) -> Result<Option<i64>, String> {
+    conn.query_row(
+        "SELECT MAX(id) FROM pending_queue WHERE sync_status <> 'completed'",
+        [],
+        |row| row.get(0),
+    )
+    .map_err(to_message)
+}
+
+fn pending_items_through(
+    conn: &Connection,
+    batch_max_sequence: Option<i64>,
+) -> Result<Vec<PendingItem>, String> {
+    let Some(batch_max_sequence) = batch_max_sequence else {
+        return Ok(Vec::new());
+    };
     let mut stmt = conn
         .prepare(
             "SELECT id, operation, local_id, task_list_id, task_id, payload_json, sync_status
              FROM pending_queue
-             WHERE sync_status <> 'completed'
+             WHERE sync_status <> 'completed' AND id <= ?1
              ORDER BY id ASC",
         )
         .map_err(to_message)?;
     let rows = stmt
-        .query_map([], |row| {
+        .query_map(params![batch_max_sequence], |row| {
             Ok(PendingItem {
                 id: row.get(0)?,
                 operation: row.get(1)?,
@@ -1280,6 +1402,12 @@ fn set_meta(conn: &Connection, key: &str, value: &str) -> Result<(), String> {
         params![key, value],
     )
     .map_err(to_message)?;
+    Ok(())
+}
+
+fn delete_meta(conn: &Connection, key: &str) -> Result<(), String> {
+    conn.execute("DELETE FROM sync_meta WHERE key = ?1", params![key])
+        .map_err(to_message)?;
     Ok(())
 }
 
@@ -1398,6 +1526,79 @@ mod tests {
         set_app_setting(&conn, "googleTodoListColors", None).expect("delete setting");
         let settings = read_app_settings(&conn).expect("read settings");
         assert!(!settings.contains_key("googleTodoListColors"));
+    }
+
+    #[test]
+    fn pending_items_stop_at_the_batch_watermark() {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        let conn = open_database_at(temp_dir.path()).expect("open test database");
+        for task_id in ["task-1", "task-2", "task-3"] {
+            enqueue_pending(
+                &conn,
+                "delete_task",
+                None,
+                "list-1",
+                Some(task_id),
+                Some(task_id),
+                &Value::Null,
+            )
+            .expect("enqueue task");
+        }
+
+        assert_eq!(max_pending_sequence(&conn).expect("read watermark"), Some(3));
+        let batch = pending_items_through(&conn, Some(2)).expect("read batch");
+        assert_eq!(batch.iter().map(|item| item.id).collect::<Vec<_>>(), vec![1, 2]);
+    }
+
+    #[test]
+    fn remote_snapshot_preserves_tasks_with_pending_local_changes() {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        let mut conn = open_database_at(temp_dir.path()).expect("open test database");
+        let local_task = GoogleTaskDto {
+            id: "task-1".to_string(),
+            task_list_id: "list-1".to_string(),
+            title: "Locally edited task".to_string(),
+            notes: None,
+            due: Some("2026-08-20T00:00:00.000Z".to_string()),
+            status: "needsAction".to_string(),
+            parent: None,
+            position: None,
+            completed: false,
+            completed_at: None,
+        };
+        upsert_task(&conn, &local_task).expect("cache local task");
+        enqueue_pending(
+            &conn,
+            "update_task",
+            None,
+            "list-1",
+            Some("task-1"),
+            Some("Locally edited task"),
+            &json!({
+                "task_list_id": "list-1",
+                "task_id": "task-1",
+                "due": "2026-08-20T00:00:00.000Z"
+            }),
+        )
+        .expect("enqueue local update");
+        let remote_task = GoogleTaskDto {
+            title: "Stale remote task".to_string(),
+            due: Some("2026-08-01T00:00:00.000Z".to_string()),
+            ..local_task.clone()
+        };
+        let lists = vec![GoogleTaskListDto {
+            id: "list-1".to_string(),
+            title: "Tasks".to_string(),
+        }];
+
+        replace_remote_snapshot(&mut conn, &lists, &[remote_task])
+            .expect("replace remote snapshot");
+
+        let preserved = read_task(&conn, "task-1")
+            .expect("read preserved task")
+            .expect("task remains cached");
+        assert_eq!(preserved.title, "Locally edited task");
+        assert_eq!(preserved.due.as_deref(), Some("2026-08-20T00:00:00.000Z"));
     }
 
     #[test]
