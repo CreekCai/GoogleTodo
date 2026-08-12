@@ -1130,6 +1130,9 @@ export default function App() {
     void syncApi.setAppSetting(key, value).catch(() => undefined);
   };
   const noteTaskSyncQueued = (message?: string) => {
+    if (syncLoopBusyRef.current) {
+      syncLoopQueuedRef.current = true;
+    }
     setPendingCount((current) => current + 1);
     setSyncMessage(
       message ?? uiText(languageRef.current, "Saved locally. Syncing in the background.", "已保存到本地，正在后台同步。"),
@@ -1752,26 +1755,28 @@ export default function App() {
     return true;
   };
 
-  const refreshGoogleData = async (preferredListId?: string) => {
+  const refreshGoogleData = async (preferredListId?: string): Promise<SyncResult | null> => {
     setGoogleSyncing(true);
     setSyncMessage(uiText(language, "Syncing with Google Tasks...", "正在同步 Google Tasks..."));
     setLastGoogleError("");
     try {
       const result = await syncApi.syncNow();
       applySyncResult(result, preferredListId);
+      return result;
     } catch (error) {
       if (await handleInvalidGoogleAuth(error)) {
-        return;
+        return null;
       }
       const message = `${uiText(language, "Sync failed: ", "同步失败：")}${String(error)}`;
       setSyncMessage(message);
       setLastGoogleError(message);
+      return null;
     } finally {
       setGoogleSyncing(false);
     }
   };
 
-  const refreshSyncQueueStatus = async (showLoading = false) => {
+  const refreshSyncQueueStatus = async (showLoading = false): Promise<SyncQueueSnapshot | null> => {
     if (showLoading) {
       setSyncQueueLoading(true);
     }
@@ -1780,8 +1785,10 @@ export default function App() {
       setSyncQueue(snapshot);
       setSyncQueueError("");
       setPendingCount(snapshot.waiting_count + snapshot.syncing_count + snapshot.failed_count);
+      return snapshot;
     } catch (error) {
       setSyncQueueError(`${uiText(languageRef.current, "Could not load sync status: ", "无法读取同步状态：")}${String(error)}`);
+      return null;
     } finally {
       if (showLoading) {
         setSyncQueueLoading(false);
@@ -1916,8 +1923,17 @@ export default function App() {
       do {
         syncLoopQueuedRef.current = false;
         syncLoopQueuedListIdRef.current = undefined;
-        await refreshGoogleData(nextPreferredListId);
+        const syncResult = await refreshGoogleData(nextPreferredListId);
         await refreshCalendarEvents(calendarMonthRef.current);
+        if (syncResult?.status === "ok") {
+          const queueSnapshot = await refreshSyncQueueStatus();
+          if (queueSnapshot && queueSnapshot.waiting_count > 0) {
+            syncLoopQueuedRef.current = true;
+            void syncApi.recordDiagnosticEvent("sync_follow_up_queued", {
+              waiting_count: queueSnapshot.waiting_count,
+            }).catch(() => undefined);
+          }
+        }
         nextPreferredListId = syncLoopQueuedListIdRef.current ?? activeListIdRef.current;
       } while (syncLoopQueuedRef.current);
     } finally {
@@ -3287,6 +3303,7 @@ export default function App() {
               globalError={lastGoogleError}
               queueError={syncQueueError}
               language={language}
+              autoSyncEnabled={autoSyncMode !== "off"}
               onSync={() => {
                 void refreshGoogleWorkspaceData(activeListId).then(() => refreshSyncQueueStatus(true));
               }}
@@ -5418,6 +5435,7 @@ type SyncStatusWorkspaceProps = {
   globalError: string;
   queueError: string;
   language: LanguageMode;
+  autoSyncEnabled: boolean;
   onSync: () => void;
   onOpenLogFolder: () => void;
 };
@@ -5442,7 +5460,7 @@ function syncErrorSuggestion(error: string, language: LanguageMode) {
   return uiText(language, "Use Refresh & Sync to retry. If the error persists, check Google sign-in and proxy settings.", "请点击“刷新同步”重试；若持续失败，请检查 Google 登录状态和代理设置。");
 }
 
-function SyncStatusWorkspace({ snapshot, loading, syncing, globalError, queueError, language, onSync, onOpenLogFolder }: SyncStatusWorkspaceProps) {
+function SyncStatusWorkspace({ snapshot, loading, syncing, globalError, queueError, language, autoSyncEnabled, onSync, onOpenLogFolder }: SyncStatusWorkspaceProps) {
   const statusMeta = {
     syncing: {
       label: uiText(language, "Syncing", "同步中"),
@@ -5494,7 +5512,9 @@ function SyncStatusWorkspace({ snapshot, loading, syncing, globalError, queueErr
       ? uiText(language, "Synchronization stopped on an error", "同步因错误而停止")
       : syncing
         ? uiText(language, "A synchronization batch is in progress", "当前同步批次正在进行")
-        : uiText(language, "Changes are safely waiting in the queue", "修改已安全进入任务池等待同步");
+        : autoSyncEnabled
+          ? uiText(language, "Changes are queued for automatic sync", "修改已进入任务池，即将自动同步")
+          : uiText(language, "Changes are waiting for manual sync", "修改正在等待手动同步");
   const progressDetail = snapshot
     ? allSynced
       ? uiText(language, "Every queued change has reached Google Tasks.", "任务池中的修改都已成功同步到 Google Tasks。")
@@ -5514,11 +5534,17 @@ function SyncStatusWorkspace({ snapshot, loading, syncing, globalError, queueErr
                 ? `正在同步，另有 ${snapshot.waiting_count} 项新修改已安全进入任务池。`
                 : "正在同步当前修改，你可以继续操作任务。",
             )
-          : uiText(
-              language,
-              `${snapshot.waiting_count} change(s) are safely queued. Select Refresh & Sync when you are ready.`,
-              `已有 ${snapshot.waiting_count} 项修改安全进入任务池，准备好后请点击“刷新同步”。`,
-            )
+          : autoSyncEnabled
+            ? uiText(
+                language,
+                `${snapshot.waiting_count} change(s) are safely queued and will sync automatically. You can keep working.`,
+                `已有 ${snapshot.waiting_count} 项修改安全进入任务池，稍后将自动同步，你可以继续操作。`,
+              )
+            : uiText(
+                language,
+                `${snapshot.waiting_count} change(s) are waiting. Select Refresh & Sync to start manual sync.`,
+                `有 ${snapshot.waiting_count} 项修改正在等待，请点击“刷新同步”开始手动同步。`,
+              )
     : "";
 
   return (
