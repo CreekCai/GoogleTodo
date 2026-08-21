@@ -88,6 +88,17 @@
   .app-modal-panel {
     animation: app-modal-in 180ms cubic-bezier(0.23, 1, 0.32, 1) both;
   }
+
+  .app-undo-toast {
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity 180ms ease-out, transform 180ms cubic-bezier(0.23, 1, 0.32, 1);
+
+    @starting-style {
+      opacity: 0;
+      transform: translateY(100%);
+    }
+  }
 }
 
 @keyframes app-fade-in {
@@ -108,7 +119,9 @@
 
 @media (prefers-reduced-motion: reduce) {
   .app-modal-backdrop,
-  .app-modal-panel {
+  .app-modal-panel,
+  .app-undo-toast {
     animation: none;
+    transition: none;
   }
 }

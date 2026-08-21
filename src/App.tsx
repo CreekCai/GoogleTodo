@@ -26,6 +26,7 @@ import {
   PanelLeftOpen,
   Plus,
   RefreshCw,
+  RotateCcw,
   Search,
   Trash2,
   X,
@@ -75,6 +76,10 @@ type TaskActivityRecord = {
   action: TaskActivityAction;
   operatedAt: string;
   taskSnapshot: Task;
+};
+type RecentCompletion = {
+  taskId: string;
+  title: string;
 };
 type TaskListItem =
   | { kind: "task"; id: string; task: Task }
@@ -1102,6 +1107,7 @@ export default function App() {
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveMessage, setSaveMessage] = useState("Auto-sync enabled");
+  const [recentCompletion, setRecentCompletion] = useState<RecentCompletion | null>(null);
   const [settingsHydrated, setSettingsHydrated] = useState(false);
   const [quickDraft, setQuickDraft] = useState<QuickTaskDraft>(() =>
     createDefaultQuickDraft(activeListId),
@@ -1142,6 +1148,14 @@ export default function App() {
   useEffect(() => {
     activeListIdRef.current = activeListId;
   }, [activeListId]);
+
+  useEffect(() => {
+    if (!recentCompletion) {
+      return undefined;
+    }
+    const timer = window.setTimeout(() => setRecentCompletion(null), 8_000);
+    return () => window.clearTimeout(timer);
+  }, [recentCompletion]);
 
   useEffect(() => {
     languageRef.current = language;
@@ -2686,12 +2700,17 @@ export default function App() {
     setDraftSubtaskTitle("");
   };
 
-  const toggleTaskComplete = async (taskId: string) => {
+  const setTaskCompletion = async (taskId: string, completed: boolean, offerUndo = false) => {
     const task = tasks.find((item) => item.id === taskId);
     if (!task) {
       return;
     }
-    const completed = !task.completed;
+    if (task.completed === completed) {
+      if (!completed) {
+        setRecentCompletion((current) => (current?.taskId === taskId ? null : current));
+      }
+      return;
+    }
     const completedAt = completed ? new Date().toISOString() : undefined;
     setTasks((current) =>
       current.map((item) =>
@@ -2699,7 +2718,35 @@ export default function App() {
       ),
     );
     recordCompletedActivity(task, completed);
+    if (completed && offerUndo) {
+      setRecentCompletion({ taskId, title: task.title });
+    } else if (!completed) {
+      setRecentCompletion((current) => (current?.taskId === taskId ? null : current));
+      if (activeView === "archive" && selectedTaskId === taskId) {
+        setSelectedTaskId("");
+      }
+    }
     await persistGoogleTaskUpdate(taskId, { completed });
+  };
+
+  const toggleTaskComplete = async (taskId: string) => {
+    const task = tasks.find((item) => item.id === taskId);
+    if (!task) {
+      return;
+    }
+    await setTaskCompletion(taskId, !task.completed, !task.completed);
+  };
+
+  const restoreCompletedTask = async (taskId: string) => {
+    const task = tasks.find((item) => item.id === taskId);
+    if (task?.completed) {
+      void syncApi.recordDiagnosticEvent("task_restore_requested", {
+        task_id: task.id,
+        task_list_id: task.listId,
+        task_title: task.title,
+      }).catch(() => undefined);
+    }
+    await setTaskCompletion(taskId, false);
   };
 
   const toggleSubtask = async (taskId: string, subtaskId: string) => {
@@ -3139,6 +3186,7 @@ export default function App() {
                   language={language}
                   onUpdateTask={updateTask}
                   onPersistTask={(taskId, patch) => void autoPersistTask(taskId, patch)}
+                  onToggleCompletion={() => void toggleTaskComplete(selectedTask.id)}
                   onChangeTaskList={changeTaskList}
                   onDeleteTask={() => void deleteSelectedTask()}
                   saveState={saveState}
@@ -3171,6 +3219,7 @@ export default function App() {
                   language={language}
                   onUpdateTask={updateTask}
                   onPersistTask={(taskId, patch) => void autoPersistTask(taskId, patch)}
+                  onToggleCompletion={() => void toggleTaskComplete(selectedTask.id)}
                   onChangeTaskList={changeTaskList}
                   onDeleteTask={() => void deleteSelectedTask()}
                   saveState={saveState}
@@ -3219,6 +3268,7 @@ export default function App() {
                   language={language}
                   onUpdateTask={updateTask}
                   onPersistTask={(taskId, patch) => void autoPersistTask(taskId, patch)}
+                  onToggleCompletion={() => void toggleTaskComplete(selectedTask.id)}
                   onChangeTaskList={changeTaskList}
                   onDeleteTask={() => void deleteSelectedTask()}
                   saveState={saveState}
@@ -3256,6 +3306,7 @@ export default function App() {
                   setSelectedCalendarEventId("");
                   setSelectedTaskId(taskId);
                 }}
+                onRestoreTask={(taskId) => void restoreCompletedTask(taskId)}
                 actions={
                   <div className="rounded-lg border border-hairline bg-surface-soft p-md dark:border-surface-dark-elevated dark:bg-surface-dark-elevated">
                     <div className="text-title-md text-ink dark:text-on-dark">
@@ -3285,6 +3336,7 @@ export default function App() {
                   language={language}
                   onUpdateTask={updateTask}
                   onPersistTask={(taskId, patch) => void autoPersistTask(taskId, patch)}
+                  onToggleCompletion={() => void toggleTaskComplete(selectedTask.id)}
                   onChangeTaskList={changeTaskList}
                   onDeleteTask={() => void deleteSelectedTask()}
                   saveState={saveState}
@@ -3333,6 +3385,7 @@ export default function App() {
                   language={language}
                   onUpdateTask={updateTask}
                   onPersistTask={(taskId, patch) => void autoPersistTask(taskId, patch)}
+                  onToggleCompletion={() => void toggleTaskComplete(selectedTask.id)}
                   onChangeTaskList={changeTaskList}
                   onDeleteTask={() => void deleteSelectedTask()}
                   saveState={saveState}
@@ -3427,6 +3480,23 @@ export default function App() {
           onShowCollapsedSidebarBadgesChange={setShowCollapsedSidebarBadges}
           onExpandSubtasksChange={setExpandSubtasks}
         />
+        {recentCompletion ? (
+          <div
+            role="status"
+            aria-live="polite"
+            className="app-undo-toast fixed bottom-lg right-lg z-[60] flex max-w-sm items-center gap-md rounded-xl border border-hairline bg-surface px-md py-sm text-ink shadow-panel dark:border-surface-dark-elevated dark:bg-surface-dark-elevated dark:text-on-dark"
+          >
+            <CheckCircle2 size={19} className="shrink-0 text-success" />
+            <div className="min-w-0 flex-1">
+              <div className="text-body-sm font-semibold">{uiText(language, "Task completed", "任务已完成")}</div>
+              <div className="truncate text-caption text-muted dark:text-on-dark-soft">{recentCompletion.title}</div>
+            </div>
+            <Button variant="ghost" className="h-8 shrink-0 px-sm" onClick={() => void restoreCompletedTask(recentCompletion.taskId)}>
+              <RotateCcw size={16} />
+              {uiText(language, "Undo", "撤销")}
+            </Button>
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -4022,6 +4092,7 @@ type TaskDetailsPanelProps = {
   language: LanguageMode;
   onUpdateTask: (taskId: string, patch: Partial<Task>) => void;
   onPersistTask: (taskId: string, patch: Partial<Task>) => void;
+  onToggleCompletion: () => void;
   onChangeTaskList: (taskId: string, listId: string) => void;
   onDeleteTask: () => void;
   saveState: SaveState;
@@ -4035,6 +4106,7 @@ function TaskDetailsPanel({
   language,
   onUpdateTask,
   onPersistTask,
+  onToggleCompletion,
   onChangeTaskList,
   onDeleteTask,
   saveState,
@@ -4086,6 +4158,12 @@ function TaskDetailsPanel({
 
       <div className="app-scrollbar mt-lg min-h-0 flex-1 overflow-y-auto pr-xs">
       <div className="space-y-md">
+        <Button variant="secondary" className="w-full" onClick={onToggleCompletion}>
+          {task.completed ? <RotateCcw size={17} /> : <Check size={17} />}
+          {task.completed
+            ? uiText(language, "Restore to original list", "恢复到原清单")
+            : uiText(language, "Mark as completed", "标记为已完成")}
+        </Button>
         <textarea
           ref={titleRef}
           rows={1}
@@ -5294,6 +5372,7 @@ type UtilityWorkspaceProps = {
   language: LanguageMode;
   selectedTaskId: string;
   onSelectTask: (taskId: string) => void;
+  onRestoreTask?: (taskId: string) => void;
   actions?: ReactNode;
 };
 
@@ -5373,7 +5452,7 @@ function formatSyncDuration(createdAt: string, syncedAt: string, language: Langu
   return uiText(language, `${minutes}m ${remainingSeconds}s`, `${minutes} 分 ${remainingSeconds} 秒`);
 }
 
-function UtilityWorkspace({ title, description, items, emptyText, language, selectedTaskId, onSelectTask, actions }: UtilityWorkspaceProps) {
+function UtilityWorkspace({ title, description, items, emptyText, language, selectedTaskId, onSelectTask, onRestoreTask, actions }: UtilityWorkspaceProps) {
   return (
     <section className="min-h-0 flex-1 overflow-y-auto bg-canvas p-lg dark:bg-surface-dark">
       <h1 className="font-display text-display-md text-ink dark:text-on-dark">{uiDictionary[title] && language === "zh" ? uiDictionary[title] : title}</h1>
@@ -5387,40 +5466,48 @@ function UtilityWorkspace({ title, description, items, emptyText, language, sele
           />
         ) : (
           items.map((item) => (
-            <button
+            <div
               key={item.id}
               data-detail-interactive={item.action === "completed" ? "true" : undefined}
               className={cn(
                 "flex w-full items-start gap-md rounded-lg border border-hairline bg-surface p-md text-left transition-colors dark:border-surface-dark-elevated dark:bg-surface-dark-elevated",
-                item.action === "completed" ? "hover:ring-1 hover:ring-primary" : "cursor-default",
+                item.action === "completed" ? "hover:border-primary/40" : "cursor-default",
                 selectedTaskId === item.taskId && item.action === "completed" && "ring-2 ring-primary",
               )}
-              onClick={() => {
-                if (item.action === "completed") {
-                  onSelectTask(item.taskId);
-                }
-              }}
             >
-              <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center text-muted">
-                {item.action === "completed" ? (
-                  <CompletionGlyph completed />
-                ) : (
-                  <span className="grid h-5 w-5 place-items-center rounded-full bg-error text-on-dark">
-                    <X size={14} />
-                  </span>
-                )}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-title-md text-ink dark:text-on-dark">{item.taskSnapshot.title}</span>
-                <span className="mt-xxs block text-caption text-muted dark:text-on-dark-soft">
-                  {item.action === "completed"
-                    ? uiText(language, "Completed", "已完成")
-                    : uiText(language, "Deleted", "已删除")}
-                  {" · "}
-                  {formatActivityTime(item.operatedAt, language)}
+              <button
+                type="button"
+                className={cn("app-focus-ring flex min-w-0 flex-1 items-start gap-md text-left", item.action !== "completed" && "cursor-default")}
+                disabled={item.action !== "completed"}
+                onClick={() => item.action === "completed" && onSelectTask(item.taskId)}
+              >
+                <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center text-muted">
+                  {item.action === "completed" ? (
+                    <CompletionGlyph completed />
+                  ) : (
+                    <span className="grid h-5 w-5 place-items-center rounded-full bg-error text-on-dark">
+                      <X size={14} />
+                    </span>
+                  )}
                 </span>
-              </span>
-            </button>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-title-md text-ink dark:text-on-dark">{item.taskSnapshot.title}</span>
+                  <span className="mt-xxs block text-caption text-muted dark:text-on-dark-soft">
+                    {item.action === "completed"
+                      ? uiText(language, "Completed", "已完成")
+                      : uiText(language, "Deleted", "已删除")}
+                    {" · "}
+                    {formatActivityTime(item.operatedAt, language)}
+                  </span>
+                </span>
+              </button>
+              {item.action === "completed" && onRestoreTask ? (
+                <Button variant="secondary" className="h-9 shrink-0 px-sm" onClick={() => onRestoreTask(item.taskId)}>
+                  <RotateCcw size={16} />
+                  {uiText(language, "Restore", "恢复")}
+                </Button>
+              ) : null}
+            </div>
           ))
         )}
       </div>
